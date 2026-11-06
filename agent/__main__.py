@@ -10,6 +10,7 @@ EXPENSES_APP       Expenses' name on the gateway (default custom-expenses)
 
 import os
 import pathlib
+import sys
 
 import httpx2
 import uvicorn
@@ -22,6 +23,8 @@ PORT = int(os.getenv("AGENT_PORT", "8080"))
 
 
 def main() -> None:
+    if not os.getenv("HUSH_GATEWAY_URL"):
+        sys.exit(f"Set HUSH_GATEWAY_URL.\n{__doc__}")
     agent_url = os.getenv("AGENT_URL", f"http://localhost:{PORT}").rstrip("/")
     identity = Identity(
         http=httpx2.AsyncClient(timeout=30),
