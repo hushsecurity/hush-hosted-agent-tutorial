@@ -1,0 +1,27 @@
+{{- $agent := include "tutorial.componentName" (list . "agent") -}}
+The tutorial is installed in namespace {{ .Release.Namespace }}. The agent runs as
+service account system:serviceaccount:{{ .Release.Namespace }}:{{ .Values.agent.serviceAccount }}:
+it must match the agent you registered in Hush.
+
+Open the agent's page:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ $agent }} {{ .Values.agent.port }}:{{ .Values.agent.port }}
+
+then browse to {{ .Values.agent.url }}.
+{{- if include "tutorial.tunnel" . }}
+
+Expenses is public, through a Cloudflare quick tunnel. Its address:
+
+  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "tutorial.componentName" (list . "expenses") }} | grep "Expenses is at"
+
+Signing in to Expenses asks for this access code:
+
+  kubectl get secret -n {{ .Release.Namespace }} {{ include "tutorial.expensesSecret" . }} -o jsonpath='{.data.code}' | base64 -d
+{{- else }}
+
+Expenses is at {{ .Values.expenses.url }}: serve the {{ include "tutorial.componentName" (list . "expenses") }} Service there.
+{{- end }}
+
+Uninstall:
+
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}

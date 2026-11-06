@@ -1,0 +1,69 @@
+{{- if include "tutorial.tunnel" . }}
+{{- $name := include "tutorial.componentName" (list . "tunnel") }}
+# A Cloudflare quick tunnel to Expenses' public Service, and nothing else:
+# it gives Expenses a public HTTPS address with no account or setup.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "tunnel") | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "tutorial.selectorLabels" (list . "tunnel") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tutorial.selectorLabels" (list . "tunnel") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "tutorial.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: cloudflared
+          image: {{ .Values.tunnel.image }}
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - {{ printf "0.0.0.0:%v" .Values.tunnel.metricsPort | quote }}
+            - --url
+            - {{ printf "http://%s:%v" (include "tutorial.componentName" (list . "expenses")) .Values.expenses.port | quote }}
+          securityContext:
+            {{- include "tutorial.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.tunnel.metricsPort }}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.tunnel.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "tunnel") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "tutorial.selectorLabels" (list . "tunnel") | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.tunnel.metricsPort }}
+      targetPort: metrics
+{{- end }}

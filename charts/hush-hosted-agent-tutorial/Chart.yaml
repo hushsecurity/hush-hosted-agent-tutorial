@@ -1,0 +1,6 @@
+apiVersion: v2
+name: hush-hosted-agent-tutorial
+description: Guided tutorial for Hush hosted agents acting for signed-in users, with a sample Expenses app
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -83,7 +83,8 @@ def build(store: Store, base_url: str, access_code: str | None = None, client_ke
 def app(store: Store, base_url: str, access_code: str | None = None, client_key: str | None = None) -> Starlette:
     """Expenses as served: the MCP server and its sign-in."""
     # host="0.0.0.0" also turns off the SDK's localhost-only Host check: in
-    # the cluster, the gateway reaches Expenses by its public name.
-    served = build(store, base_url, access_code, client_key).streamable_http_app(host="0.0.0.0")
+    # the cluster, the gateway reaches Expenses by its public name. Plain JSON
+    # answers rather than event streams, which some tunnels hold back.
+    served = build(store, base_url, access_code, client_key).streamable_http_app(host="0.0.0.0", json_response=True)
     served.add_middleware(auth.ClientIdFromBasicAuth)
     return served

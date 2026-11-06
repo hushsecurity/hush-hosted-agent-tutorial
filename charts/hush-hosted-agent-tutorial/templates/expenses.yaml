@@ -1,0 +1,121 @@
+{{- $name := include "tutorial.componentName" (list . "expenses") }}
+{{- $tunnel := include "tutorial.tunnel" . }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "tutorial.expensesSecret" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "expenses") | nindent 4 }}
+type: Opaque
+data:
+  # Signs the clients Expenses registers, such as the gateway: kept, so they
+  # stay registered when Expenses restarts.
+  client-key: {{ include "tutorial.expensesSecretValue" (list . "client-key") | b64enc | quote }}
+  {{- if $tunnel }}
+  # Signing in to Expenses asks for it.
+  code: {{ include "tutorial.expensesSecretValue" (list . "code") | b64enc | quote }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "expenses") | nindent 4 }}
+spec:
+  replicas: 1
+  # Its accounts live in memory: one pod, replaced rather than rolled.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "tutorial.selectorLabels" (list . "expenses") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tutorial.selectorLabels" (list . "expenses") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "tutorial.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: expenses
+          image: {{ include "tutorial.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["expenses"]
+          securityContext:
+            {{- include "tutorial.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: EXPENSES_PORT
+              value: {{ .Values.expenses.port | quote }}
+            - name: EXPENSES_INTERNAL_PORT
+              value: {{ .Values.expenses.internalPort | quote }}
+            {{- if $tunnel }}
+            - name: EXPENSES_TUNNEL
+              value: {{ printf "http://%s:%v" (include "tutorial.componentName" (list . "tunnel")) .Values.tunnel.metricsPort | quote }}
+            - name: EXPENSES_ACCESS_CODE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tutorial.expensesSecret" . }}
+                  key: code
+            {{- else }}
+            - name: EXPENSES_URL
+              value: {{ .Values.expenses.url | quote }}
+            {{- end }}
+            - name: EXPENSES_CLIENT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "tutorial.expensesSecret" . }}
+                  key: client-key
+          ports:
+            - name: http
+              containerPort: {{ .Values.expenses.port }}
+            - name: internal
+              containerPort: {{ .Values.expenses.internalPort }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: internal
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.expenses.resources | nindent 12 }}
+---
+# The MCP server and its sign-in: what the gateway and your browser reach.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "expenses") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "tutorial.selectorLabels" (list . "expenses") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.expenses.port }}
+      targetPort: http
+---
+# The log of calls: inside the cluster only, apart from the public Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-internal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "expenses") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "tutorial.selectorLabels" (list . "expenses") | nindent 4 }}
+  ports:
+    - name: internal
+      port: {{ .Values.expenses.internalPort }}
+      targetPort: internal

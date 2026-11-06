@@ -1,0 +1,95 @@
+{{- include "tutorial.validate" . }}
+{{- $name := include "tutorial.componentName" (list . "agent") }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.agent.serviceAccount }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "agent") | nindent 4 }}
+# The agent's only Kubernetes token is the one issued for the gateway, below.
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "agent") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tutorial.selectorLabels" (list . "agent") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tutorial.selectorLabels" (list . "agent") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.agent.serviceAccount }}
+      automountServiceAccountToken: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "tutorial.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: agent
+          image: {{ include "tutorial.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["agent"]
+          securityContext:
+            {{- include "tutorial.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: HUSH_GATEWAY_URL
+              value: {{ .Values.gateway.url | quote }}
+            - name: AGENT_URL
+              value: {{ .Values.agent.url | quote }}
+            - name: AGENT_PORT
+              value: {{ .Values.agent.port | quote }}
+            - name: AGENT_TOKEN_FILE
+              value: /var/run/secrets/hush/token
+            - name: EXPENSES_APP
+              value: {{ .Values.agent.expensesApp | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.agent.port }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.agent.resources | nindent 12 }}
+          volumeMounts:
+            - name: hush-token
+              mountPath: /var/run/secrets/hush
+              readOnly: true
+      volumes:
+        # What the agent proves itself with to Hush: a short-lived token of its
+        # service account, good only for the gateway, renewed by Kubernetes.
+        - name: hush-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: {{ .Values.gateway.issuer | quote }}
+                  expirationSeconds: 3600
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "agent") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "tutorial.selectorLabels" (list . "agent") | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.agent.port }}
+      targetPort: http

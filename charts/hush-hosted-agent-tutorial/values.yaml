@@ -1,0 +1,67 @@
+nameOverride: ""
+fullnameOverride: hush-hosted-agent-tutorial
+
+# One image runs both the agent and Expenses.
+image:
+  repository: public.ecr.aws/z0t8l6o4/hush-hosted-agent-tutorial
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# The Hush gateway the agent works through. Required.
+gateway:
+  # Its MCP address, as the Hush UI shows it: https://<gateway>/mcp
+  url: ""
+  # Who issues the gateway's tokens: the agent's Kubernetes token is issued
+  # for it (its audience). Read it from the gateway:
+  #   curl -s https://<gateway>/.well-known/oauth-protected-resource/mcp
+  # and take authorization_servers[0].
+  issuer: ""
+
+agent:
+  # Registered in Hush as this service account: the token's subject is
+  # system:serviceaccount:<namespace>:<serviceAccount>.
+  serviceAccount: agent
+  # Where your browser reaches the agent's page. The default suits
+  # kubectl port-forward; set it when serving the page from elsewhere.
+  url: http://localhost:8080
+  port: 8080
+  # The name Expenses has on the gateway.
+  expensesApp: custom-expenses
+  resources:
+    requests: {cpu: 10m, memory: 64Mi}
+    limits: {memory: 256Mi}
+
+expenses:
+  # Expenses' public HTTPS address, for a load balancer or ingress you set up
+  # in front of the expenses Service. The gateway and your browser both reach
+  # Expenses there.
+  #
+  # Left empty, a Cloudflare quick tunnel gives Expenses a random public
+  # address under trycloudflare.com instead, and signing in to Expenses asks
+  # for an access code the chart generates (the tutorial page shows it). The
+  # tunnel's address changes whenever its pod restarts.
+  url: ""
+  port: 8000
+  # The log of calls, for the agent's page only.
+  internalPort: 8001
+  resources:
+    requests: {cpu: 10m, memory: 64Mi}
+    limits: {memory: 256Mi}
+
+tunnel:
+  image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+  # Where Expenses reads the tunnel's address from.
+  metricsPort: 2000
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+# Let in only the traffic the tutorial needs: Expenses' log of calls from the
+# agent only, the tunnel's metrics from Expenses only. Takes effect where the
+# cluster's network enforces NetworkPolicy.
+networkPolicy:
+  enabled: true
+
+# Where the tutorial's pods may run, for example {kubernetes.io/arch: amd64}.
+nodeSelector: {}
