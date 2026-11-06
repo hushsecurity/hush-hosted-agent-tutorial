@@ -36,7 +36,7 @@ hush:
 agent:
   # Registered in Hush as this service account: the token's subject is
   # system:serviceaccount:<namespace>:<serviceAccount>.
-  serviceAccount: agent
+  serviceAccount: expenses-assistant
   # Where your browser reaches the agent's page. The default suits
   # kubectl port-forward; set it when serving the page from elsewhere.
   url: http://localhost:8080
@@ -58,7 +58,7 @@ expenses:
   # tunnel's address changes whenever its pod restarts.
   url: ""
   port: 8000
-  # The log of calls, for the agent's page only.
+  # What Expenses saw, and its address: for the agent's page only.
   internalPort: 8001
   resources:
     requests: {cpu: 10m, memory: 64Mi}
@@ -67,6 +67,7 @@ expenses:
 # Puts Expenses in Hush with the API key, the only part of the tutorial that
 # holds it.
 setup:
+  # Whether Hush has Expenses: for the agent's page only.
   port: 8002
   resources:
     requests: {cpu: 10m, memory: 64Mi}
@@ -80,9 +81,9 @@ tunnel:
     requests: {cpu: 10m, memory: 32Mi}
     limits: {memory: 128Mi}
 
-# Let in only the traffic the tutorial needs: Expenses' log of calls from the
-# agent only, the tunnel's metrics from Expenses and setup only. Takes effect
-# where the cluster's network enforces NetworkPolicy.
+# Let in only the traffic the tutorial needs: Expenses' log of calls and
+# setup's status from the agent only, the tunnel's metrics from Expenses and
+# setup only. Takes effect where the cluster's network enforces NetworkPolicy.
 networkPolicy:
   enabled: true
 

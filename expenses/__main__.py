@@ -50,7 +50,7 @@ async def main() -> None:
     public = server.app(store, public_url, ACCESS_CODE, CLIENT_KEY)
     servers = [
         Server(uvicorn.Config(app, host="0.0.0.0", port=port, timeout_graceful_shutdown=SHUTDOWN_GRACE))
-        for app, port in ((public, PORT), (internal.build(store), INTERNAL_PORT))
+        for app, port in ((public, PORT), (internal.build(store, public_url, ACCESS_CODE), INTERNAL_PORT))
     ]
 
     def stop() -> None:

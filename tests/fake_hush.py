@@ -14,8 +14,8 @@ from starlette.routing import Route
 GATEWAY = "https://gateway.example.com"
 ISSUER = "https://hush.example.com/v1/deployments/dep-1/agents"
 AGENT_ID = "agt-1"
+AGENT_NAME = "expenses-assistant"
 AGENT_RESOURCE = f"https://hush.example.com/v1/agents/{AGENT_ID}"
-SERVICE_ACCOUNT_TOKEN = "service-account-token"
 ALLOWED = {"dana@example.com"}
 
 
@@ -24,6 +24,11 @@ def jwt(claims: dict) -> str:
         return base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode()
 
     return f"{part({'alg': 'none'})}.{part(claims)}.sig"
+
+
+CLUSTER_ISSUER = "https://oidc.cluster.example.com"
+SERVICE_ACCOUNT = "system:serviceaccount:tutorial:expenses-assistant"
+SERVICE_ACCOUNT_TOKEN = jwt({"iss": CLUSTER_ISSUER, "sub": SERVICE_ACCOUNT, "aud": [ISSUER]})
 
 
 class FakeHush:
@@ -55,15 +60,15 @@ class FakeHush:
             grant = form["grant_type"]
             if grant == "client_credentials":
                 if not self.registered or form.get("client_assertion") != SERVICE_ACCOUNT_TOKEN:
-                    return JSONResponse({"error": "invalid_client"}, status_code=401)
-                return JSONResponse({"access_token": jwt({"sub": AGENT_ID, "agent_id": AGENT_ID}),
+                    return JSONResponse({"error": "invalid_client", "error_description": "invalid assertion"}, status_code=401)
+                return JSONResponse({"access_token": jwt({"sub": AGENT_ID, "agent_id": AGENT_ID, "agent_name": AGENT_NAME}),
                                      "expires_in": self.user_ttl})
             if grant in ("authorization_code", "refresh_token"):
                 return JSONResponse({"access_token": jwt({**user, "aud": AGENT_RESOURCE}),
                                      "refresh_token": "refresh-1", "expires_in": self.user_ttl})
             if grant == "urn:ietf:params:oauth:grant-type:token-exchange":
                 if form.get("client_assertion") != SERVICE_ACCOUNT_TOKEN:
-                    return JSONResponse({"error": "invalid_client"}, status_code=401)
+                    return JSONResponse({"error": "invalid_client", "error_description": "invalid assertion"}, status_code=401)
                 if self.user_email not in ALLOWED:
                     return JSONResponse({"error": "invalid_grant",
                                          "error_description": "this agent may not act for this user"},

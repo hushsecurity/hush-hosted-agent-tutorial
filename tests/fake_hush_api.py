@@ -76,6 +76,8 @@ class FakeHushAPI:
             app = self.apps.get(path.split("/")[3])
             if app is None:
                 return httpx2.Response(404)
+            if method == "GET" and path.endswith("/mcp"):
+                return httpx2.Response(200, json=app)
             if method == "PATCH" and path.endswith("/mcp"):
                 app.update(body)
                 return httpx2.Response(200, json=app)

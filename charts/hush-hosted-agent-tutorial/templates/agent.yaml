@@ -53,6 +53,12 @@ spec:
               value: /var/run/secrets/hush/token
             - name: EXPENSES_APP
               value: {{ printf "custom-%s" .Values.expenses.name | quote }}
+            - name: EXPENSES_INTERNAL
+              value: {{ printf "http://%s-internal:%v" (include "tutorial.componentName" (list . "expenses")) .Values.expenses.internalPort | quote }}
+            - name: HELM_RELEASE
+              value: {{ .Release.Name | quote }}
+            - name: SETUP_INTERNAL
+              value: {{ printf "http://%s:%v" (include "tutorial.componentName" (list . "setup")) .Values.setup.port | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.agent.port }}

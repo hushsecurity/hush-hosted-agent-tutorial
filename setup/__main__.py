@@ -52,27 +52,48 @@ async def expenses_in_hush(http: httpx2.AsyncClient, with_url: bool) -> tuple[hu
     return api, expenses
 
 
-async def put(status: dict) -> None:
-    """Until Hush has Expenses: a missing scope or a gateway still starting
-    may clear up."""
-    async with httpx2.AsyncClient(timeout=30) as http:
-        api = expenses = None
+class Setup:
+    """Puts Expenses in Hush, then answers the agent's page about it."""
+
+    def __init__(self, http: httpx2.AsyncClient):
+        self.http = http
+        self.status = {"state": "working", "error": None}
+        self.api: hush.HushAPI | None = None
+        self.app_id: str | None = None
+
+    async def put(self) -> None:
+        """Until Hush has Expenses: a missing scope or a gateway still
+        starting may clear up."""
+        expenses = None
         while True:
             try:
                 if expenses is None:
-                    api, expenses = await expenses_in_hush(http, with_url=True)
-                app = await hush.put(api, expenses)
+                    self.api, expenses = await expenses_in_hush(self.http, with_url=True)
+                app = await hush.put(self.api, expenses)
             except Exception as e:
                 log.warning("putting Expenses in Hush failed, retrying: %s", e)
-                status.update(state="failed", error=explain(e))
+                self.status.update(state="failed", error=explain(e))
                 await asyncio.sleep(RETRY_SECONDS)
                 continue
             log.info("Expenses is in Hush as %s, on the gateway as %s", expenses.name, app.get("name"))
             if app.get("name") != expenses.catalog_id:
                 log.warning("the agent calls Expenses as %s, but the gateway has it as %s",
                             expenses.catalog_id, app.get("name"))
-            status.update(state="ready", error=None, catalog=expenses.name, app=app.get("name"), url=expenses.url)
+            self.app_id = app["id"]
+            self.status.update(state="ready", error=None, catalog=expenses.name, app=app.get("name"),
+                               display_name=hush.DISPLAY_NAME, url=expenses.url)
             return
+
+    async def assigned_to(self, agent_id: str) -> dict:
+        """Whether the reader assigned Expenses to the agent: None until Hush
+        has Expenses, or when asking fails."""
+        if self.app_id is None:
+            return {"assigned": None, "error": None}
+        try:
+            return {"assigned": await hush.assigned_to(self.api, self.app_id, agent_id), "error": None}
+        except Exception as e:
+            log.warning("reading Expenses' assignments failed: %s", e)
+            return {"assigned": None, "error": explain(e)}
 
 
 def explain(e: Exception) -> str:
@@ -99,20 +120,25 @@ async def remove() -> None:
     log.info("removed Expenses from Hush")
 
 
-def status_app(status: dict) -> Starlette:
+def status_app(setup: Setup) -> Starlette:
     async def show(request) -> JSONResponse:
-        return JSONResponse(status)
+        return JSONResponse(setup.status)
 
     async def ready(request) -> JSONResponse:
-        return JSONResponse(status, status_code=200 if status["state"] == "ready" else 503)
+        return JSONResponse(setup.status, status_code=200 if setup.status["state"] == "ready" else 503)
 
-    return Starlette(routes=[Route("/status", show), Route("/ready", ready)])
+    async def assigned(request) -> JSONResponse:
+        return JSONResponse(await setup.assigned_to(request.path_params["agent_id"]))
+
+    return Starlette(routes=[Route("/status", show), Route("/ready", ready),
+                             Route("/assigned/{agent_id}", assigned)])
 
 
 async def main() -> None:
-    status = {"state": "working", "error": None}
-    server = uvicorn.Server(uvicorn.Config(status_app(status), host="0.0.0.0", port=PORT))
-    await asyncio.gather(server.serve(), put(status))
+    async with httpx2.AsyncClient(timeout=30) as http:
+        setup = Setup(http)
+        server = uvicorn.Server(uvicorn.Config(status_app(setup), host="0.0.0.0", port=PORT))
+        await asyncio.gather(server.serve(), setup.put())
 
 
 if __name__ == "__main__":

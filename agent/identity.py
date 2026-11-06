@@ -107,6 +107,10 @@ class Identity:
     async def agent_resource(self) -> str:
         """This agent, as users sign in for it. Asked of Hush each time, not
         configured: registering the agent again gives it a new id."""
+        return (await self.registration())["resource"]
+
+    async def registration(self) -> dict:
+        """This agent as Hush knows it: its id and name, and what users sign in for."""
         try:
             body = await self._token("agent", {"grant_type": "client_credentials", **self._assertion()})
         except HushRefused as e:
@@ -116,7 +120,8 @@ class Identity:
                 raise HushRefused("agent", e.status, e.error, "Hush didn't accept the agent's identity: is it "
                                   f"registered in Hush? ({e.description or e.error})") from e
             raise
-        agent_id = claims(body["access_token"]).get("agent_id")
+        token = claims(body["access_token"])
+        agent_id = token.get("agent_id")
         if not agent_id:
             raise HushRefused("agent", 502, "unexpected_token", "Hush's token for the agent names no agent")
         # The gateway's issuer is <api>/deployments/<deployment>/agents; an
@@ -126,7 +131,7 @@ class Identity:
         if not found:
             raise HushRefused("agent", 502, "unexpected_issuer",
                               f"can't tell the agent's resource from the gateway's issuer {issuer}")
-        return f"{api}/agents/{agent_id}"
+        return {"id": agent_id, "name": token.get("agent_name"), "resource": f"{api}/agents/{agent_id}"}
 
     # --- The user signs in, for this agent ---
 
@@ -183,8 +188,12 @@ class Identity:
                     "refresh_token": user.refresh,
                     "client_id": await self._client(),
                 })
-            except HushRefused:
-                session.user = None
+            except HushRefused as e:
+                # Hush refusing the refresh ends the sign-in; Hush failing
+                # keeps it, to refresh again on the next call.
+                if 400 <= e.status < 500:
+                    session.user = None
+                    raise HushRefused("sign-in", 401, "login_required", "your sign-in expired, sign in again") from e
                 raise
             session.user = _user_tokens(body, previous_refresh=user.refresh)
             return session.user.access

@@ -34,6 +34,14 @@ async def test_a_call_arrives(tmp_path):
     assert gateway.calls == [("list_expenses", {})]
 
 
+@pytest.mark.parametrize("count", [0, 1, 3])
+async def test_a_list_of_expenses_reads_as_a_list(tmp_path, count):
+    expenses = [{"id": 1000 + i, "description": "Taxi", "amount": 12.0, "category": "Travel"} for i in range(count)]
+    async with agent(tmp_path, FakeGateway(expenses=expenses)) as (agent_expenses, session):
+        outcome = await agent_expenses.run(session, "list_expenses", {})
+    assert outcome.kind == "done" and outcome.data == expenses
+
+
 async def test_the_user_connects_expenses_first(tmp_path):
     async with agent(tmp_path, FakeGateway(connection="disconnected")) as (expenses, session):
         outcome = await expenses.run(session, "list_expenses", {})
@@ -112,7 +120,7 @@ async def test_a_gateway_failure_is_an_error_outcome(tmp_path):
     assert "gateway trouble" in outcome.message
 
 
-@pytest.mark.parametrize("lost", ["disconnected", "expired"])
+@pytest.mark.parametrize("lost", ["disconnected", "expired", "rejected"])
 async def test_a_connection_lost_since_the_app_list_asks_to_connect_again(tmp_path, lost):
     async with agent(tmp_path, FakeGateway(connection_lost=lost)) as (expenses, session):
         outcome = await expenses.run(session, "list_expenses", {})

@@ -61,6 +61,23 @@ spec:
           resources:
             {{- toYaml .Values.setup.resources | nindent 12 }}
 ---
+# Whether Hush has Expenses: for the agent's page only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "setup") | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "tutorial.selectorLabels" (list . "setup") | nindent 4 }}
+  ports:
+    - name: status
+      port: {{ .Values.setup.port }}
+      targetPort: status
+---
 # On uninstall, before the API key goes: takes Expenses out of Hush.
 apiVersion: batch/v1
 kind: Job

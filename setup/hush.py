@@ -145,6 +145,22 @@ async def remove(api: HushAPI, expenses: Expenses) -> None:
     await api.request("DELETE", f"/v1/applications/custom/{expenses.name}")
 
 
+async def assigned_to(api: HushAPI, app_id: str, agent_id: str) -> bool:
+    """Whether one of the application's assignment rules names the agent:
+    what the reader adds in its Assignments tab."""
+    app = await api.request("GET", f"/v1/applications/{app_id}/mcp")
+    for rule in app.get("assignments") or []:
+        for condition in rule.get("all_of") or []:
+            for p in condition.get("any_of") or []:
+                if p.get("source") != "agent" or p.get("property") != "id":
+                    continue
+                value = p.get("value")
+                if (p.get("op") == "eq" and value == agent_id) or (p.get("op") == "in" and isinstance(value, list)
+                                                                     and agent_id in value):
+                    return True
+    return False
+
+
 async def catalog_entry(api: HushAPI, expenses: Expenses) -> dict | None:
     try:
         return await api.request("GET", f"/v1/applications/custom/{expenses.name}/mcp")

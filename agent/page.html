@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hosted Agent Tutorial</title>
+<style>
+  /* A step bar on top. "Try the assistant" puts the agent's own app beside the story, and what happened behind it below. */
+  :root {
+    --bg: #ffffff; --surface: #f3f5f9; --surface-2: #e9edf4; --ink: #0d0d26; --text: #33334d; --muted: #5a5a72;
+    --faint: #8a8aa0; --line: #e1e4ec; --accent: #4033d6; --accent-soft: #eceaff; --ok: #006b00; --ok-soft: #e2f7e2;
+    --deny: #9c2f17; --deny-soft: #fbe7e1; --note: #7a5000; --note-soft: #fff1cc; --code-bg: #0d0d26; --code-ink: #eef0f6;
+    /* The assistant's own brand: deliberately not Hush's. */
+    --app: #0b7a63; --app-ink: #ffffff; --app-soft: #e3f4ef; --app-bg: #fbfcfc; --app-line: #d6e6e1; --app-text: #1d2b28;
+    --app-muted: #5d6f6a; --app-shadow: 0 1px 2px rgb(16 40 34 / 0.06), 0 12px 32px rgb(16 40 34 / 0.12);
+    --sans: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0b17; --surface: #15152a; --surface-2: #1d1d36; --ink: #f2f2fa; --text: #c8c8db; --muted: #9a9ab4;
+      --faint: #6f6f8a; --line: #26263f; --accent: #a9a0ff; --accent-soft: #242050; --ok: #7fe08a; --ok-soft: #12301b;
+      --deny: #ff9d86; --deny-soft: #3a1a13; --note: #ffd47a; --note-soft: #362a0f; --code-bg: #05050e; --code-ink: #e6e8f2;
+      --app: #3cc9a5; --app-ink: #062a21; --app-soft: #12302a; --app-bg: #101c1a; --app-line: #23403a; --app-text: #e3efec;
+      --app-muted: #93aba5; --app-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0b17; --surface: #15152a; --surface-2: #1d1d36; --ink: #f2f2fa; --text: #c8c8db; --muted: #9a9ab4;
+    --faint: #6f6f8a; --line: #26263f; --accent: #a9a0ff; --accent-soft: #242050; --ok: #7fe08a; --ok-soft: #12301b;
+    --deny: #ff9d86; --deny-soft: #3a1a13; --note: #ffd47a; --note-soft: #362a0f; --code-bg: #05050e; --code-ink: #e6e8f2;
+    --app: #3cc9a5; --app-ink: #062a21; --app-soft: #12302a; --app-bg: #101c1a; --app-line: #23403a; --app-text: #e3efec;
+    --app-muted: #93aba5; --app-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+  h1, h2, h3 { color: var(--ink); margin: 0; line-height: 1.2; text-wrap: balance; }
+  p { margin: 0; }
+  code { font-family: var(--mono); font-size: 0.86em; color: var(--ink); overflow-wrap: anywhere; }
+  button, input, select { font: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  .wrap { padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); max-width: 1320px; margin: 0 auto; }
+  @media (min-width: 640px) { .wrap { padding-inline: 24px; } }
+
+  header { border-bottom: 1px solid var(--line); }
+  header .wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-block: 16px; }
+  .logo { color: var(--ink); width: 140px; height: 27px; display: block; flex: none; }
+  .logo svg { width: 100%; height: 100%; display: block; }
+  .product { font-weight: 600; color: var(--ink); padding-left: 16px; border-left: 1px solid var(--line); }
+
+  nav.steps { border-bottom: 1px solid var(--line); background: var(--surface); }
+  nav.steps ol { list-style: none; margin: 0; display: flex; gap: 4px; overflow-x: auto; }
+  nav.steps button {
+    display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px; border: 0; background: none; cursor: pointer;
+    color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-weight: 500;
+  }
+  nav.steps button[aria-current="step"] { color: var(--ink); border-bottom-color: var(--accent); }
+  nav.steps .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--surface-2); color: var(--ink); }
+  nav.steps button[aria-current="step"] .n { background: var(--accent); color: var(--bg); }
+  nav.steps .done .n { background: var(--ok-soft); color: var(--ok); }
+
+  main .wrap { padding-block: 32px 56px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 720px); gap: 40px; }
+  .layout.with-app { grid-template-columns: minmax(300px, 1fr) minmax(340px, 500px); }
+  @media (max-width: 980px) { .layout.with-app { grid-template-columns: minmax(0, 1fr); gap: 28px; } }
+  .story { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+  .story h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
+  .story h2 { font-size: 17px; margin-top: 8px; }
+  .story p { max-width: 64ch; }
+  .tasks { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; counter-reset: task; }
+  .tasks > li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; counter-increment: task; }
+  .tasks > li::before { content: counter(task); width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2); color: var(--ink); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+  .points { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .points li { display: flex; gap: 12px; }
+  .points li::before { content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin: 9px 4px 0; }
+
+  .fields { border-collapse: collapse; font-size: 13px; width: 100%; }
+  .fields th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 12px 8px 0; white-space: nowrap; vertical-align: top; }
+  .fields td { padding: 8px 0; width: 100%; }
+  .fields tr + tr > * { border-top: 1px solid var(--line); }
+  .fields.policies td, .fields.policies thead th { width: auto; padding-right: 12px; }
+  .fields.policies thead th { font-size: 12px; border-bottom: 1px solid var(--line); }
+  .val { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+  .val code { min-width: 0; }
+  .copy { flex: none; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0 7px; cursor: pointer; }
+  .copy:hover { border-color: var(--accent); }
+  .cmd { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 10px 10px 10px 12px; }
+  .cmd code { color: inherit; flex: 1; min-width: 0; white-space: pre-wrap; font-size: 12.5px; }
+  .cmd .copy { color: var(--code-ink); background: none; border-color: #3a3a58; }
+
+  .btn { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 8px;
+    padding: 8px 14px; font-weight: 600; cursor: pointer; text-decoration: none; transition: filter 0.12s, transform 0.12s; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .btn:hover:not(:disabled) { filter: brightness(1.1); }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn:disabled { opacity: 0.6; cursor: default; }
+  .row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .note { font-size: 13px; color: var(--muted); }
+  .spin { flex: none; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .spin { animation-duration: 2.4s; } }
+
+  .result { border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+  .result > * { display: block; }
+  .result > * + * { margin-top: 6px; }
+  .result.ok { background: var(--ok-soft); color: var(--ok); }
+  .result.wait { background: var(--note-soft); color: var(--note); }
+  .result.no { background: var(--deny-soft); color: var(--deny); }
+  .result a { color: inherit; font-weight: 600; }
+  .result .detail { font-size: 12.5px; opacity: 0.85; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .status.ok { color: var(--ok); }
+  .status.wait { color: var(--note); }
+  .status.no { color: var(--deny); }
+  .warn { font-size: 13px; color: var(--note); background: var(--note-soft); border-radius: 8px; padding: 8px 10px; }
+  .aside { font-size: 13px; color: var(--muted); border-left: 3px solid var(--accent-soft); padding-left: 12px; }
+  .nav-row { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+
+  /* The story beside the assistant: where the reader is, and what's next. */
+  .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .timeline > li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; padding-bottom: 18px; position: relative; }
+  .timeline > li:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 30px; bottom: 4px; width: 2px; background: var(--line); }
+  .timeline .mark { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--surface-2); color: var(--muted); }
+  .timeline .current .mark { background: var(--accent); color: var(--bg); }
+  .timeline .done .mark { background: var(--ok-soft); color: var(--ok); }
+  .timeline h3 { font-size: 16px; padding-top: 3px; }
+  .timeline .todo h3 { color: var(--muted); font-weight: 500; }
+  .timeline .body { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+  .timeline .done .body { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .checklist li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; font-size: 14px; }
+  .checklist .tick { width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+  .checklist .yes .tick { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+  .checklist .why { color: var(--muted); }
+
+  /* The assistant: the agent's own app, not part of the tutorial. */
+  .app-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .app-label { display: flex; align-items: baseline; gap: 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .app-label span { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .appwin { background: var(--app-bg); color: var(--app-text); border: 1px solid var(--app-line); border-radius: 18px; box-shadow: var(--app-shadow);
+    overflow: hidden; font-family: var(--sans); }
+  .appwin h3 { color: var(--app-text); }
+  .appbar { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--app); color: var(--app-ink); }
+  .applogo { width: 34px; height: 34px; border-radius: 10px; background: rgb(255 255 255 / 0.18); display: grid; place-items: center; flex: none; }
+  .applogo svg { width: 20px; height: 20px; }
+  .appname { display: flex; flex-direction: column; line-height: 1.2; }
+  .appname b { font-size: 15px; }
+  .appname small { font-size: 12px; opacity: 0.8; }
+  .appbar .menu { margin-left: auto; position: relative; }
+  .appbar summary { list-style: none; cursor: pointer; }
+  .appbar summary::-webkit-details-marker { display: none; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700;
+    background: var(--app-ink); color: var(--app); }
+  .menu-pop { position: absolute; right: 0; top: 42px; z-index: 2; min-width: 220px; background: var(--app-bg); color: var(--app-text);
+    border: 1px solid var(--app-line); border-radius: 12px; box-shadow: var(--app-shadow); padding: 12px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+  .menu-pop .who { display: flex; flex-direction: column; overflow-wrap: anywhere; }
+  .menu-pop .who span { color: var(--app-muted); }
+  .appbody { padding: 18px 16px 20px; display: flex; flex-direction: column; gap: 14px; min-height: 360px; }
+  .appbody.center { align-items: center; justify-content: center; text-align: center; }
+  .appbody.center p { max-width: 34ch; color: var(--app-muted); }
+  .hero { width: 64px; height: 64px; border-radius: 18px; background: var(--app-soft); color: var(--app); display: grid; place-items: center; }
+  .hero svg { width: 32px; height: 32px; }
+  .abtn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--app); background: var(--app); color: var(--app-ink);
+    border-radius: 999px; padding: 9px 18px; font-weight: 600; cursor: pointer; text-decoration: none; transition: filter 0.12s, transform 0.12s; }
+  .abtn.ghost { background: none; color: var(--app); }
+  .abtn.small { padding: 5px 12px; font-size: 13px; }
+  .abtn:hover:not(:disabled) { filter: brightness(1.08); }
+  .abtn:active:not(:disabled) { transform: translateY(1px); }
+  .abtn:disabled { opacity: 0.6; cursor: default; }
+  .icon-btn { border: 0; background: none; color: var(--app-muted); width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; cursor: pointer; flex: none; }
+  .icon-btn:hover:not(:disabled) { background: var(--app-soft); color: var(--app-text); }
+  .icon-btn:disabled { cursor: default; }
+  .icon-btn svg { width: 17px; height: 17px; }
+  .greet { display: flex; align-items: center; gap: 8px; }
+  .greet h3 { font-size: 17px; }
+  .greet .icon-btn { margin-left: auto; }
+  .say { font-size: 14px; color: var(--app-muted); }
+  .bubble { display: flex; gap: 10px; align-items: flex-start; border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+  .bubble.ok { background: var(--ok-soft); color: var(--ok); }
+  .bubble.wait { background: var(--note-soft); color: var(--note); }
+  .bubble.no { background: var(--deny-soft); color: var(--deny); }
+  .bubble a { color: inherit; font-weight: 600; }
+  .bubble .text { flex: 1; min-width: 0; }
+  .bubble .icon-btn { width: 24px; height: 24px; color: inherit; }
+  .bubble .spin { margin-top: 4px; }
+  .items { list-style: none; margin: 0; padding: 0; border: 1px solid var(--app-line); border-radius: 12px; overflow: hidden; }
+  .items li { display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 14px; }
+  .items li + li { border-top: 1px solid var(--app-line); }
+  .items .what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .items .what b { font-weight: 600; overflow-wrap: anywhere; }
+  .items .what span { font-size: 12.5px; color: var(--app-muted); }
+  .items .amt { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .items .total { background: var(--app-soft); font-weight: 600; padding-right: 48px; }
+  .items .total .what { font-weight: 600; }
+  .items .none { color: var(--app-muted); font-size: 14px; }
+  .add { display: grid; grid-template-columns: minmax(0, 1fr) 7em; gap: 8px; border-top: 1px dashed var(--app-line); padding-top: 14px; }
+  .add h4 { grid-column: 1 / -1; margin: 0; font-size: 14px; color: var(--app-text); }
+  .add label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--app-muted); }
+  .add input, .add select { border: 1px solid var(--app-line); border-radius: 10px; padding: 7px 10px; background: var(--app-bg); color: var(--app-text); width: 100%; }
+  .add .wide { grid-column: 1 / -1; }
+  .add .abtn { justify-self: start; }
+  .fine { font: 12px/1.4 var(--mono); color: var(--app-muted); overflow-wrap: anywhere; max-width: 40ch; }
+
+  /* Behind the assistant: the token it acts with, and the calls Expenses got. */
+  .behind { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 28px; margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--line); }
+  @media (max-width: 980px) { .behind { grid-template-columns: minmax(0, 1fr); } }
+  .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .panel-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .panel-head h2 { font-size: 17px; }
+  .panel-head .sub { font-size: 13px; color: var(--muted); }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  table.log { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
+  .log th, .log td { padding: 9px 12px; text-align: left; vertical-align: top; }
+  .log thead th { font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--surface); border-bottom: 1px solid var(--line); }
+  .log tbody tr + tr td { border-top: 1px solid var(--line); }
+  .log .mono { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+  .log .nowrap { white-space: nowrap; }
+  .log .when { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .log tr.new td { animation: flash 1.8s ease-out; }
+  @keyframes flash { from { background: color-mix(in srgb, var(--ok) 18%, transparent); } to { background: transparent; } }
+  @media (prefers-reduced-motion: reduce) { .log tr.new td { animation: none; } }
+  .empty { font-size: 13px; color: var(--muted); padding: 14px; }
+  .claims { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; }
+  .claims .k { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .claims .v { font-family: var(--mono); font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
+  .claims .hl { color: var(--accent); font-weight: 700; }
+  .claims .cap { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <span class="logo" role="img" aria-label="Hush Security"><svg aria-hidden="true" focusable="false" viewBox="0 0 290 56" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="none" overflow="hidden"><defs><linearGradient x1="31" y1="42.5459" x2="5.25264e-07" y2="11.0459" gradientUnits="userSpaceOnUse" id="paint0_linear_385_49155"><stop offset="0" stop-color="#FFC300"></stop><stop offset="1" stop-color="#FF2C2C"></stop></linearGradient><linearGradient x1="31" y1="42.5459" x2="5.25264e-07" y2="11.0459" gradientUnits="userSpaceOnUse" id="paint1_linear_385_49155"><stop offset="0" stop-color="#FFC300"></stop><stop offset="1" stop-color="#FF2C2C"></stop></linearGradient><linearGradient x1="31" y1="42.5459" x2="5.25264e-07" y2="11.0459" gradientUnits="userSpaceOnUse" id="paint2_linear_385_49155"><stop offset="0" stop-color="#FFC300"></stop><stop offset="1" stop-color="#FF2C2C"></stop></linearGradient><linearGradient x1="19.9999" y1="6.52243" x2="31.4992" y2="21.046" gradientUnits="userSpaceOnUse" id="paint3_linear_385_49155"><stop offset="0" stop-color="#4CBB17"></stop><stop offset="1" stop-color="#007AFF"></stop></linearGradient></defs><path d="M38.499 45.4854 38.499 13.624 44.7388 13.624 44.7388 26.3509 59.503 26.3509 59.503 13.6682 65.7428 13.6682 65.7428 45.4854 59.503 45.4854 59.503 32.0767 44.7388 32.0767 44.7388 45.4854 38.499 45.4854Z" fill="currentColor"></path><path d="M78.0942 46.0287C76.2716 46.0287 74.7275 45.6626 73.4681 44.9366 72.2088 44.2106 71.2405 43.0806 70.5761 41.5529 69.9053 40.0251 69.5762 38.0429 69.5762 35.6187L69.5762 22.7529 75.5882 22.7529 75.5882 34.3877C75.5882 35.9028 75.7654 37.0896 76.1134 37.9545 76.4615 38.8194 76.9614 39.438 77.6196 39.8168 78.2714 40.1956 79.0118 40.385 79.8282 40.385 81.4103 40.4165 82.6064 39.9367 83.4291 38.9519 84.2518 37.9671 84.6568 36.5341 84.6568 34.6591L84.6568 22.7529 90.6688 22.7529 90.6688 45.4795 85.0175 45.4795 84.7897 42.3862C84.0303 43.5351 83.081 44.4316 81.9419 45.0692 80.8028 45.7068 79.5181 46.0224 78.0942 46.0224L78.0942 46.0287Z" fill="currentColor"></path><path d="M102.562 46.0287C101.106 46.0287 99.7392 45.8078 98.4608 45.3722 97.1825 44.9303 96.0624 44.299 95.0878 43.4657 94.1132 42.6324 93.3538 41.6097 92.8096 40.3976L97.9609 38.0366C98.4165 38.7626 99.0367 39.3938 99.8278 39.9241 100.619 40.4544 101.53 40.7196 102.562 40.7196 103.593 40.7196 104.34 40.5744 104.884 40.2903 105.428 39.9999 105.707 39.5832 105.707 39.0403 105.707 38.4974 105.485 38.0934 105.049 37.8346 104.606 37.5757 104.011 37.3548 103.251 37.178L101.157 36.6351C98.9671 36.0606 97.2458 35.1452 95.9864 33.8827 94.7271 32.6264 94.0942 31.1807 94.0942 29.5394 94.0942 27.2036 94.8473 25.4044 96.3472 24.1292 97.8533 22.854 99.986 22.2227 102.752 22.2227 104.182 22.2227 105.511 22.4373 106.738 22.8603 107.966 23.2832 109.023 23.8766 109.903 24.6342 110.782 25.3918 111.39 26.2693 111.725 27.273L106.757 29.5457C106.542 28.9396 106.03 28.4472 105.207 28.0684 104.384 27.6897 103.568 27.5003 102.745 27.5003 101.922 27.5003 101.296 27.677 100.853 28.0242 100.41 28.3715 100.195 28.8512 100.195 29.4573 100.195 29.8487 100.404 30.177 100.834 30.4358 101.258 30.6946 101.866 30.9156 102.657 31.0923L105.618 31.8183C107.105 32.1845 108.302 32.7653 109.194 33.567 110.092 34.3687 110.744 35.2652 111.156 36.25 111.567 37.2348 111.769 38.1944 111.769 39.135 111.769 40.4986 111.364 41.7044 110.561 42.746 109.757 43.794 108.662 44.602 107.283 45.1765 105.903 45.751 104.327 46.0414 102.568 46.0414L102.562 46.0287Z" fill="currentColor"></path><path d="M113.496 45.4852 113.496 13.668 119.508 13.668 119.508 25.6689C120.267 24.5452 121.21 23.6929 122.331 23.0995 123.457 22.5061 124.716 22.2157 126.115 22.2157 127.938 22.2157 129.482 22.5818 130.741 23.3078 132 24.0338 132.969 25.1638 133.633 26.6916 134.304 28.2193 134.633 30.2016 134.633 32.6257L134.633 45.4915 128.621 45.4915 128.621 33.8567C128.621 32.3101 128.437 31.1169 128.077 30.2647 127.71 29.4188 127.21 28.8064 126.571 28.4213 125.931 28.0425 125.191 27.8531 124.337 27.8531 122.786 27.8216 121.596 28.295 120.761 29.2609 119.926 30.2331 119.508 31.6725 119.508 33.579L119.508 45.4852 113.496 45.4852Z" fill="currentColor"></path><path d="M149.535 46.028C147.744 46.028 146.168 45.8386 144.821 45.4599 143.466 45.0811 142.308 44.5571 141.334 43.8943 140.359 43.2251 139.562 42.4865 138.941 41.6658 138.321 40.8451 137.84 39.9866 137.505 39.0775L140.239 38.0295C140.758 39.4563 141.77 40.7062 143.289 41.7794 144.808 42.8526 146.662 43.3955 148.845 43.3955 151.643 43.3955 153.813 42.8589 155.364 41.7794 156.914 40.7062 157.686 39.2858 157.686 37.5308 157.686 35.7758 156.971 34.4817 155.547 33.4653 154.117 32.4489 152.269 31.6535 149.991 31.079L146.757 30.2583C145.358 29.8922 144.061 29.3745 142.859 28.6927 141.656 28.0109 140.694 27.1397 139.967 26.0792 139.239 25.0186 138.872 23.7181 138.872 22.1714 138.872 19.3243 139.783 17.1022 141.606 15.5113 143.428 13.9204 146.086 13.125 149.579 13.125 151.674 13.125 153.484 13.4785 155.003 14.1919 156.522 14.9052 157.743 15.7827 158.673 16.8307 159.604 17.8786 160.218 18.9266 160.521 19.9872L157.832 21.0351C157.161 19.3685 156.079 18.0743 154.573 17.1463 153.066 16.2247 151.25 15.7575 149.13 15.7575 146.884 15.7575 145.099 16.3004 143.776 17.3925 142.454 18.4847 141.796 19.9556 141.796 21.799 141.796 23.4656 142.314 24.7156 143.346 25.5489 144.378 26.3822 145.732 27.0135 147.403 27.4364L150.636 28.2066C153.858 28.9642 156.326 30.1699 158.041 31.8176 159.756 33.4716 160.616 35.2329 160.616 37.1142 160.616 38.7177 160.205 40.1949 159.389 41.5458 158.566 42.8968 157.338 43.9763 155.699 44.797 154.06 45.6177 152.01 46.0217 149.548 46.0217L149.535 46.028Z" fill="currentColor"></path><path d="M174.552 46.0282C172.363 46.0282 170.426 45.5232 168.743 44.5068 167.06 43.4904 165.737 42.0889 164.781 40.3024 163.826 38.5158 163.345 36.4515 163.345 34.122 163.345 31.7925 163.813 29.7282 164.756 27.9417 165.699 26.1551 166.996 24.7536 168.654 23.7372 170.312 22.7209 172.198 22.2158 174.325 22.2158 176.451 22.2158 178.311 22.7398 179.818 23.7814 181.324 24.8294 182.469 26.2687 183.26 28.0995 184.051 29.9302 184.444 32.0451 184.444 34.4377L166.034 34.4377C166.186 37.3164 167.028 39.5511 168.566 41.142 170.097 42.7329 172.097 43.5283 174.559 43.5283 176.318 43.5283 177.818 43.099 179.046 42.2341 180.273 41.3693 181.241 40.2582 181.938 38.8946L184.216 40.3024C183.64 41.4261 182.887 42.4172 181.963 43.2821 181.039 44.147 179.95 44.8225 178.704 45.3022 177.457 45.7883 176.077 46.0282 174.559 46.0282L174.552 46.0282ZM166.306 31.9377 181.482 31.9377C181.393 30.4858 181.039 29.2169 180.431 28.1437 179.824 27.0705 179.001 26.2245 177.97 25.6185 176.938 25.0125 175.723 24.7094 174.325 24.7094 172.926 24.7094 171.679 25.0125 170.496 25.6185 169.312 26.2245 168.344 27.0705 167.604 28.1626 166.857 29.2547 166.427 30.511 166.306 31.9377Z" fill="currentColor"></path><path d="M197.473 46.0282C195.284 46.0282 193.347 45.5232 191.664 44.5068 189.98 43.4904 188.658 42.0889 187.702 40.3024 186.747 38.5158 186.266 36.4515 186.266 34.122 186.266 31.7925 186.734 29.7282 187.677 27.9417 188.62 26.1551 189.93 24.7536 191.619 23.7372 193.303 22.7209 195.227 22.2158 197.385 22.2158 199.543 22.2158 201.454 22.6956 203.125 23.6489 204.795 24.6021 206.086 25.9278 206.998 27.626L204.631 28.9012C203.935 27.6008 202.954 26.5781 201.694 25.8331 200.435 25.0882 198.998 24.7221 197.391 24.7221 195.784 24.7221 194.303 25.1261 193.037 25.9278 191.778 26.7296 190.79 27.8343 190.075 29.2484 189.36 30.6562 189.006 32.285 189.006 34.1346 189.006 35.9843 189.373 37.6131 190.101 39.0209 190.828 40.4286 191.835 41.5334 193.107 42.3415 194.385 43.1432 195.841 43.5472 197.48 43.5472 199.119 43.5472 200.58 43.1306 201.853 42.2973 203.131 41.464 204.099 40.3024 204.77 38.8188L207.187 40.0941C206.276 41.9438 204.979 43.3957 203.289 44.4563 201.606 45.5169 199.669 46.0472 197.48 46.0472L197.473 46.0282Z" fill="currentColor"></path><path d="M218.661 46.0283C216.927 46.0283 215.389 45.6748 214.035 44.9614 212.68 44.248 211.617 43.1117 210.845 41.5524 210.073 39.9931 209.681 37.954 209.681 35.4415L209.681 22.7588 212.415 22.7588 212.415 34.3935C212.415 36.9061 212.712 38.8189 213.301 40.1194 213.895 41.4198 214.705 42.31 215.737 42.7771 216.768 43.2506 217.908 43.4842 219.154 43.4842 221.312 43.4842 222.996 42.6887 224.211 41.0979 225.426 39.507 226.033 37.2849 226.033 34.4377L226.033 22.7588 228.767 22.7588 228.767 45.4854 226.217 45.4854 226.078 41.9375C225.318 43.238 224.318 44.248 223.072 44.9614 221.825 45.6748 220.35 46.0283 218.654 46.0283L218.661 46.0283Z" fill="currentColor"></path><path d="M233.785 45.4859 233.785 22.7593 236.519 22.7593 236.519 26.7617C237.399 25.335 238.569 24.2996 240.025 23.6494 241.481 22.9992 242.999 22.6709 244.581 22.6709L244.581 25.1708C243.246 25.1708 241.961 25.4044 240.734 25.8779 239.506 26.345 238.493 27.1341 237.702 28.2389 236.911 29.3437 236.519 30.8525 236.519 32.759L236.519 45.4859 233.785 45.4859Z" fill="currentColor"></path><path d="M248.234 16.8491C247.746 16.8491 247.322 16.6661 246.955 16.3062 246.588 15.9401 246.411 15.5171 246.411 15.031 246.411 14.5134 246.595 14.0841 246.955 13.7369 247.322 13.3897 247.746 13.2129 248.234 13.2129 248.753 13.2129 249.183 13.3897 249.531 13.7369 249.879 14.0841 250.056 14.5197 250.056 15.031 250.056 15.5171 249.879 15.9401 249.531 16.3062 249.183 16.6724 248.746 16.8491 248.234 16.8491ZM246.816 45.4846 246.816 22.7581 249.55 22.7581 249.55 45.4846 246.816 45.4846Z" fill="currentColor"></path><path d="M263.088 46.0288C260.994 46.0288 259.355 45.4733 258.165 44.3685 256.981 43.2638 256.387 41.6919 256.387 39.6654L256.387 25.2593 252.33 25.2593 252.33 22.7594 256.387 22.7594 256.387 15.6699 259.12 15.6699 259.12 22.7594 266.366 22.7594 266.366 25.2593 259.12 25.2593 259.12 39.6654C259.12 40.8775 259.469 41.8244 260.171 42.5062 260.867 43.188 261.842 43.5289 263.088 43.5289 263.455 43.5289 263.81 43.4784 264.158 43.3711 264.506 43.2638 265.019 42.986 265.683 42.5315L266.822 44.8925C265.999 45.3786 265.316 45.6879 264.772 45.8268 264.227 45.9657 263.664 46.0288 263.088 46.0288Z" fill="currentColor"></path><path d="M270.879 55.1189C270.391 55.1189 269.816 55.0305 269.145 54.8475 268.474 54.6644 267.702 54.3929 266.822 54.0268L267.822 51.7099C268.613 52.0129 269.278 52.2402 269.828 52.3917 270.373 52.5432 270.803 52.619 271.107 52.619 271.986 52.619 272.708 52.3791 273.271 51.893 273.834 51.4069 274.296 50.744 274.663 49.8918L276.486 45.4854 266.873 22.7588 269.695 22.7588 277.897 42.2153 286.143 22.7588 289.016 22.7588 277.853 49.1216C277.308 50.3968 276.739 51.4763 276.144 52.3728 275.549 53.2692 274.84 53.951 274.005 54.4182 273.17 54.8853 272.132 55.1252 270.885 55.1252L270.879 55.1189Z" fill="currentColor"></path><path d="M17.4863 45.3545 31.4756 45.3545 31.4756 31.3994 17.4863 31.3994 17.4863 45.3545Z" fill="url(#paint0_linear_385_49155)"></path><path d="M6.99414 31.3975 17.4854 31.3975 17.4854 20.9316 6.99414 20.9316 6.99414 31.3975Z" fill="url(#paint1_linear_385_49155)"></path><path d="M0 13.9551 0 20.9326 6.99414 20.9316 6.99414 13.9551 0 13.9551Z" fill="url(#paint2_linear_385_49155)"></path><path d="M20.9844 10.4658 20.9844 20.9316 31.4756 20.9316 31.4756 10.4658 20.9844 10.4658ZM13.9883 3.48926 13.9883 10.4668 20.9824 10.4668 20.9824 3.48926 13.9883 3.48926Z" fill="url(#paint3_linear_385_49155)"></path></svg></span>
+    <span class="product">Hosted Agent Tutorial</span>
+  </div>
+</header>
+
+<nav class="steps" aria-label="Tutorial steps">
+  <ol class="wrap" id="stepbar"></ol>
+</nav>
+
+<main>
+  <div class="wrap">
+    <div class="layout" id="layout">
+      <section class="story" id="story"></section>
+      <section class="app-col" id="app-col" aria-label="The expenses assistant" hidden>
+        <div class="app-label">The agent's app <span>what your users see</span></div>
+        <div class="appwin" id="app"></div>
+      </section>
+    </div>
+    <section class="behind" id="behind" aria-label="Behind the assistant" hidden>
+      <div class="panel">
+        <div class="panel-head"><h2>The agent's Hush access token</h2><span class="sub">what the agent calls the gateway with</span></div>
+        <div id="claims"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>What Expenses saw</h2><span class="sub" id="log-sub"></span></div>
+        <div class="table-scroll" id="log"></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+  const STEPS = [
+    { key: "welcome", title: "Welcome" },
+    { key: "agent", title: "Register the agent" },
+    { key: "access", title: "Grant access to Expenses" },
+    { key: "try", title: "Try the assistant" },
+    { key: "recap", title: "Recap" },
+  ];
+  const STEP_KEY = "hush-hosted-agent-tutorial-step";
+  const DONE_KEY = "hush-hosted-agent-tutorial-done";
+  const LOG_POLL_MS = 3000;
+  const SETUP_POLL_MS = 5000;
+  const CONSENT_POLL_MS = 3000;
+  const CONNECT_POLL_MS = 4000;
+  const CONNECT_POLLS = 75;
+  // Long enough to see that a check ran, even when it answers at once.
+  const CHECK_MIN_MS = 600;
+  const CATEGORIES = ["Travel", "Lodging", "Meals", "Office", "Other"];
+  const TRY_TASKS = ["try-list", "try-submit", "try-delete"];
+  // Ticked from what the page finds now, never from an earlier visit: the
+  // agent or its assignment may be gone since.
+  const LIVE_STEPS = ["agent", "access"];
+
+  let setup = null;
+  let me = { signed_in: false };
+  let step = initialStep();
+  const done = new Set(load(DONE_KEY, []).filter((key) => !LIVE_STEPS.includes(key)));
+  // Checks the reader ran: {pending} while asking, {checked} after.
+  const checks = {};
+  let token = null;
+  let tokenError = null;
+  let calls = null;
+  let seenCalls = null;
+
+  // The assistant, as its user sees it.
+  const app = {
+    phase: "loading",     // signed_out, loading, connect, ready, unavailable, refused, error
+    expenses: [],
+    connectUrl: null,
+    connecting: false,
+    message: "",
+    busy: null,           // "list", "submit", or "delete:<id>"
+    notice: null,         // {tone, html, waiting}
+    menuOpen: false,
+    signinError: null,    // why the last sign-in, or the session, ended
+    signinRefused: false, // Hush refused the sign-in, rather than the session ending
+  };
+  // What the assistant last did, for the story beside it.
+  let lastEvent = null;
+  // Hush asked the user about the expense being added, and whether it asked
+  // at all since signing in: an approval holds for later adds too.
+  let consentAsked = false;
+  let consentEverAsked = false;
+  let consentTimer = null;
+  let connectTimer = null;
+
+  function load(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch (error) { return fallback; }
+  }
+
+  function save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (error) { /* kept for this page only */ }
+  }
+
+  function initialStep() {
+    const fromHash = STEPS.findIndex((s) => `#${s.key}` === location.hash);
+    if (fromHash >= 0) return fromHash;
+    const saved = Number(load(STEP_KEY, 0));
+    return saved >= 0 && saved < STEPS.length ? saved : 0;
+  }
+
+  function markDone(key) {
+    if (done.has(key)) return;
+    done.add(key);
+    save(DONE_KEY, [...done]);
+  }
+
+  // Trying the assistant starts over with each sign-in.
+  function forgetTries() {
+    for (const key of [...TRY_TASKS, "try"]) done.delete(key);
+    save(DONE_KEY, [...done]);
+  }
+
+  const isDone = (key) => key === "agent" ? registered() : key === "access" ? assigned() : done.has(key);
+
+  // Replaces an element's content only when it changed: a poll that finds
+  // nothing new leaves the reader's text selection and focus alone.
+  const rendered = new WeakMap();
+  function setHtml(element, html) {
+    if (rendered.get(element) === html) return false;
+    element.innerHTML = html;
+    rendered.set(element, html);
+    return true;
+  }
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function esc(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+
+  // A value to type into the Hush UI, with its own copy button.
+  const val = (text) => text
+    ? `<span class="val"><code>${esc(text)}</code><button class="copy" type="button" data-copy="${esc(text)}">Copy</button></span>`
+    : `<span class="val"><code>unknown</code></span>`;
+  const cmd = (text) => `<div class="cmd"><code>${esc(text)}</code><button class="copy" type="button" data-copy="${esc(text)}">Copy</button></div>`;
+  const fields = (rows, cls = "") => `<table class="fields ${cls}">${rows.map(([k, ...v]) => `<tr><th>${k}</th>${v.map((x) => `<td>${x}</td>`).join("")}</tr>`).join("")}</table>`;
+  const spinner = `<span class="spin" aria-hidden="true"></span>`;
+  const money = (amount) => Number(amount).toFixed(2);
+
+  async function api(path, body) {
+    const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+    try {
+      const response = await fetch(path, options);
+      const reply = await response.json().catch(() => ({}));
+      return response.ok ? reply : { kind: reply.not_assigned ? "not_assigned" : "error", message: reply.message || `HTTP ${response.status}`,
+        ...reply, status: response.status };
+    } catch (error) {
+      return { kind: "error", message: "The agent's page is unreachable: is kubectl port-forward still running?" };
+    }
+  }
+
+  const serviceAccount = (subject) => /^system:serviceaccount:([^:]+):(.+)$/.exec(subject || "") || [];
+  const stepOf = (key) => STEPS.findIndex((s) => s.key === key);
+  const goTo = (key, label) => `<button class="btn" type="button" data-step="${stepOf(key)}">${label}</button>`;
+  const agentName = () => setup?.agent?.hush?.name || setup?.agent?.hush?.id;
+  const appName = () => setup?.expenses?.in_hush?.display_name || "Expenses (tutorial)";
+  const registered = () => Boolean(setup?.agent?.hush?.id);
+  const assigned = () => setup?.expenses?.assigned?.assigned === true;
+  const inHush = () => setup?.expenses?.in_hush || { state: "unknown" };
+
+  // A button that asks the agent how things stand: it shows that it's asking.
+  function checkButton(id, label) {
+    const pending = checks[id]?.pending;
+    return `<div class="row"><button class="btn" type="button" data-check="${id}"${pending ? " disabled" : ""}>
+      ${pending ? spinner : ""}${label}</button>${pending ? `<span class="note">Checking…</span>` : ""}</div>`;
+  }
+
+  async function runCheck(id) {
+    checks[id] = { pending: true };
+    render();
+    await Promise.all([loadSetup(), sleep(CHECK_MIN_MS)]);
+    checks[id] = { checked: true };
+    render();
+  }
+
+  function setupWarnings() {
+    if (!setup) return "";
+    const notes = [];
+    const { agent, gateway } = setup;
+    if (!agent.issuer) notes.push("The agent has no Kubernetes token: check its pod.");
+    if (gateway.error) notes.push(`The agent can't read the gateway's sign-in details: ${esc(gateway.error)}`);
+    else if (agent.issuer && !agent.audience.includes(gateway.issuer)) {
+      notes.push(`The agent's platform token is issued for <code>${esc(agent.audience.join(", "))}</code>, but the gateway's
+        issuer is <code>${esc(gateway.issuer)}</code>. Set <code>gateway.issuer</code> to it and upgrade the chart.`);
+    }
+    return notes.map((n) => `<p class="warn">${n}</p>`).join("");
+  }
+
+  function inHushStatus() {
+    const h = inHush();
+    if (h.state === "ready") return `<p class="status ok">✓ <span>Hush has <b>${esc(appName())}</b>: in the catalog, and on your gateway for all users.</span></p>`;
+    if (h.state === "failed") return `<p class="warn">The tutorial couldn't put Expenses in Hush yet, and keeps trying: ${esc(h.error)}</p>`;
+    if (h.state === "working") return `<p class="status wait">${spinner}<span>The tutorial is putting Expenses in Hush…</span></p>`;
+    return `<p class="warn">Can't tell whether Expenses is in Hush: is the tutorial's setup pod running?</p>`;
+  }
+
+  // ---- Steps -------------------------------------------------------------------
+
+  function storyWelcome() {
+    const a = setup?.agent || {};
+    const [, namespace, account] = serviceAccount(a.subject);
+    const url = setup?.expenses?.url;
+    return `
+      <h1>An agent that works for your users</h1>
+      <p>An expenses assistant, an agent running in your Kubernetes cluster, keeps your expense reports up to date
+        for you. It reaches Expenses, one of your company's apps, only through your Hush Identity Gateway, and Hush
+        decides what it may do, and for whom.</p>
+      <p class="note">You need an admin's access to the Hush UI.</p>
+      <h2>Already in place</h2>
+      <p>Installing the tutorial set up:</p>
+      <ul class="points">
+        <li><span><b>The assistant</b>: the agent, running${namespace ? ` in namespace <code>${esc(namespace)}</code> as
+          service account <code>${esc(account)}</code>` : ""}. It holds no secret.</span></li>
+        <li><span><b>Expenses</b>: a small MCP app standing in for one of your company's apps${url ? `, public at
+          <code>${esc(url)}</code>` : ""}. It has its own accounts.</span></li>
+        <li><span><b>${esc(appName())}</b> in Hush: the Expenses app, in Hush's catalog and on your Hush Identity Gateway for all users.</span></li>
+      </ul>
+      ${inHush().state === "ready" ? "" : inHushStatus()}
+      <h2>What you'll do</h2>
+      <ol class="tasks">
+        <li><div><b>Register the agent</b> in Hush, so Hush knows it by its Kubernetes identity.</div></li>
+        <li><div><b>Grant it access to Expenses.</b></div></li>
+        <li><div><b>Try the assistant</b> as one of its users: sign in, connect your Expenses account, then list, add
+          and delete expenses, and see what Hush lets through.</div></li>
+      </ol>
+      <div class="nav-row"><button class="btn primary" type="button" data-step="${stepOf("agent")}">Start: Register the agent</button></div>`;
+  }
+
+  function storyAgent() {
+    const a = setup?.agent || {};
+    const [, namespace, account] = serviceAccount(a.subject);
+    const hush = a.hush || {};
+    let result = "";
+    if (registered()) {
+      result = `<div class="result ok" role="status"><span>✓ Hush knows the agent as <b>${esc(agentName())}</b>.</span></div>`;
+    } else if (checks.agent?.checked) {
+      result = hush.unknown
+        ? `<div class="result no" role="status"><span>Hush doesn't know this agent yet. Check that you registered it,
+            and that its Kubernetes authentication matches the values above.</span>
+            <span class="detail">Hush's reason: ${esc(hush.reason || hush.error)}</span></div>`
+        : `<div class="result no" role="status"><span>Couldn't ask Hush about the agent.</span>
+            <span class="detail">${esc(hush.reason || hush.error || "No answer.")}</span></div>`;
+    }
+    return `
+      <h1>Register the agent</h1>
+      <p>The assistant runs in your cluster as a Kubernetes service account, and holds no secret: Kubernetes gives it a
+        short-lived platform token, issued for your gateway. Register it in Hush, so Hush trusts that token.</p>
+      <ol class="tasks">
+        <li><div>In the Hush UI, go to <b>Agentic AI › Registry</b> and click <b>Register Agent</b>. Name it, and turn on
+          <b>Act for users</b>.
+          ${fields([["Name", val("expenses-assistant")]])}</div></li>
+        <li><div>In its <b>Authentication</b> tab, click <b>Add Authentication</b>, choose type <b>Kubernetes</b>, and set:
+          ${fields([["Cluster issuer", val(a.issuer)], ["Namespace", val(namespace)], ["Service account", val(account)]])}</div></li>
+      </ol>
+      ${setupWarnings()}
+      ${registered() ? "" : checkButton("agent", "Check registration")}
+      ${result}
+      <div class="nav-row">
+        ${goTo("welcome", "Back")}
+        <button class="btn${registered() ? " primary" : ""}" type="button" data-step="${stepOf("access")}">Next: Grant access to Expenses</button>
+      </div>`;
+  }
+
+  function storyAccess() {
+    const e = setup?.expenses || {};
+    const a = e.assigned || {};
+    let result = "";
+    if (assigned()) {
+      result = `<div class="result ok" role="status"><span>✓ ${esc(appName())} is assigned to ${agentName() ? `<b>${esc(agentName())}</b>` : "the agent"}.</span></div>`;
+    } else if (checks.access?.checked) {
+      if (!registered()) {
+        result = `<div class="result no" role="status"><span>Register the agent first.</span></div>`;
+      } else if (a.assigned === false) {
+        result = `<div class="result no" role="status"><span>Not yet: no assignment of ${esc(appName())} names
+          <b>${esc(agentName())}</b>.</span></div>`;
+      } else {
+        result = `<div class="result no" role="status"><span>Couldn't read ${esc(appName())}'s assignments.</span>
+          <span class="detail">${esc(a.error || "Expenses isn't in Hush yet.")}</span></div>`;
+      }
+    }
+    return `
+      <h1>Grant the agent access to Expenses</h1>
+      <p>Expenses is a small MCP app, standing in for one of your company's apps. Each user signs in to it with their
+        email, and sees only their own expenses.</p>
+      ${inHushStatus()}
+      <p>By default, Hush gives each tool a policy by what it does. You can leave them as they are:</p>
+      <table class="fields policies"><thead><tr><th>Tool</th><th>What it does</th><th>Default policy</th></tr></thead>
+        <tbody>${[
+          ["list_expenses", "reads", "allowed"],
+          ["submit_expense", "writes", "asks the user first"],
+          ["delete_expense", "deletes", "blocked"],
+        ].map(([tool, does, policy]) => `<tr><th><code>${tool}</code></th><td>${does}</td><td>${policy}</td></tr>`).join("")}</tbody></table>
+      <p>Expenses is already on for all your users. But an agent acting for a user reaches an app only when the app is
+        assigned to the agent too: that's yours to do.</p>
+      <ol class="tasks">
+        <li><div>In the Hush UI, go to <b>Applications</b> and open <b>${esc(appName())}</b>.</div></li>
+        <li><div>In its <b>Assignments</b> tab, click <b>Add</b> and pick ${agentName() ? `<b>${esc(agentName())}</b>` : "your agent"}.</div></li>
+      </ol>
+      ${assigned() ? "" : checkButton("access", "Check assignment")}
+      ${result}
+      <div class="nav-row">
+        ${goTo("agent", "Back")}
+        <button class="btn${assigned() ? " primary" : ""}" type="button" data-step="${stepOf("try")}">Next: Try the assistant</button>
+      </div>`;
+  }
+
+  // Where the reader is in trying the assistant, from the assistant's state.
+  function tryPart() {
+    if (!me.signed_in) return "signin";
+    if (app.phase === "ready") return "use";
+    return "connect";
+  }
+
+  // What stops the assistant, past signing in: not a step of its own.
+  function tryProblem() {
+    if (!me.signed_in) return "";
+    if (app.phase === "unavailable") {
+      return `<div class="result no" role="status"><span>The gateway doesn't offer Expenses to the agent, for you.</span>
+        <span>Check that ${esc(appName())} is assigned to the agent.</span></div>
+        <div class="row">${goTo("access", "Go to Grant access to Expenses")}</div>`;
+    }
+    if (app.phase === "refused") {
+      return `<div class="result no" role="status"><span>Hush refused the token exchange: the agent may not act for you.</span>
+        <span>Check the agent in the Hush registry: is <b>Act for users</b> on, and are you one of its assigned users?</span></div>`;
+    }
+    if (app.phase === "error") {
+      return `<div class="result no" role="status"><span>The agent couldn't reach Expenses.</span><span class="detail">${esc(app.message)}</span></div>`;
+    }
+    return "";
+  }
+
+  function storyTry() {
+    const part = tryPart();
+    const problem = tryProblem();
+    const order = ["signin", "connect", "use"];
+    const state = (key) => order.indexOf(key) < order.indexOf(part) ? "done"
+      : key === part && !problem ? "current" : "todo";
+    const item = (key, n, title, current, finished = "") => {
+      const s = state(key);
+      return `<li class="${s}"><span class="mark">${s === "done" ? "✓" : n}</span><div><h3>${title}</h3>
+        ${s === "current" ? `<div class="body">${current}</div>` : s === "done" && finished ? `<div class="body"><p>${finished}</p></div>` : ""}</div></li>`;
+    };
+    return `
+      <h1>Try the assistant</h1>
+      <p>The assistant is the agent's own app, as your users see it. Use it as one of them, while these notes tell you
+        what happens behind it.</p>
+      ${problem}
+      <ol class="timeline">
+        ${item("signin", 1, "Sign in", trySignIn(), trySignedIn())}
+        ${item("connect", 2, "Connect your Expenses account", tryConnect(), "The gateway keeps your Expenses connection, and calls Expenses with it for you.")}
+        ${item("use", 3, "Work on your expenses", tryUse())}
+      </ol>
+      <div class="nav-row">
+        ${goTo("access", "Back")}
+        <button class="btn${done.has("try") ? " primary" : ""}" type="button" data-step="${stepOf("recap")}">Next: Recap</button>
+      </div>`;
+  }
+
+  function trySignIn() {
+    return `<p>Click <b>Sign in</b> in the assistant. It sends you to Hush, where you sign in with your usual
+      company account. Hush then gives the agent a Hush access token for you that only this agent can use.</p>
+      ${app.signinError ? `<div class="result no" role="status"><span>${app.signinRefused
+        ? "Hush refused the last sign-in." : "The agent no longer has your sign-in."}</span>
+        <span class="detail">${esc(app.signinError)}</span></div>` : ""}`;
+  }
+
+  function trySignedIn() {
+    return `Signed in as <b>${esc(me.email)}</b>. To act for you, the agent trades your Hush access token and its own
+      platform token for a Hush access token that names you both (an RFC 8693 token exchange): see it below.`;
+  }
+
+  function tryConnect() {
+    const e = setup?.expenses || {};
+    if (app.phase !== "connect") return `<p class="status wait">${spinner}<span>The assistant is reaching Expenses through the gateway…</span></p>`;
+    return `
+      <p>Expenses has its own accounts. The first time the agent reaches Expenses for you, the gateway asks you to
+        connect your Expenses account, once. It keeps that connection and uses it on your calls: the agent never
+        sees it.</p>
+      <p>Click <b>Connect Expenses</b> in the assistant. Expenses' sign-in asks for your email${e.access_code ? " and this access code" : ""}:</p>
+      ${fields([["Email", val(me.email)], ...(e.access_code ? [["Access code", val(e.access_code)]] : [])])}
+      ${e.access_code ? `<p class="aside">Expenses is public, through a Cloudflare quick tunnel. The access code keeps
+        others from signing in to it.</p>` : ""}`;
+  }
+
+  const EVENTS = {
+    listed: ["ok", `The assistant asked Expenses for your expenses, through the gateway. <code>list_expenses</code> only
+      reads, so the gateway let it through, and Expenses answered from your own account: see its call below.`],
+    consent: ["wait", `The gateway is holding the call: <code>submit_expense</code> writes, so it asks you first.
+      Click <b>Review the request</b> in the assistant and approve it. The assistant then adds it again, and this time
+      the token exchange carries your approval. Expenses hasn't seen the call yet.`],
+    added: ["ok", `You approved, and Expenses added the expense to your account: see its call below.`],
+    added_again: ["ok", `Expenses added the expense without asking you again: Hush remembers the approval you gave
+      earlier. See its call below.`],
+    added_directly: ["wait", `Expenses added the expense without asking you first: is <code>submit_expense</code> set
+      to ask the user in Hush?`],
+    declined: ["no", `You declined: the call never reached Expenses.`],
+    blocked: ["ok", `<b>As expected.</b> The gateway blocked the delete: <code>delete_expense</code> deletes, so Hush's policy blocks it.
+      Expenses never got the call: nothing new below.`],
+    deleted: ["wait", `Expenses deleted it: is <code>delete_expense</code> still blocked in Hush?`],
+  };
+
+  function tryUse() {
+    const tasks = [
+      ["try-list", "See your expenses", "a read: allowed by default"],
+      ["try-submit", "Add an expense", "a write: asks you first, by default"],
+      ["try-delete", "Delete an expense", "a delete: blocked by default"],
+    ];
+    const event = EVENTS[lastEvent];
+    const all = tasks.every(([key]) => done.has(key));
+    return `
+      <p>The assistant calls Expenses through the Hush Identity Gateway, with the Hush access token naming you both.
+        The gateway checks each call against the tools' policies. Try each:</p>
+      <ul class="checklist">${tasks.map(([key, title, why]) =>
+        `<li class="${done.has(key) ? "yes" : ""}"><span class="tick">${done.has(key) ? "✓" : ""}</span>
+          <span>${title} <span class="why">· ${why}</span></span></li>`).join("")}</ul>
+      ${event ? `<div class="result ${event[0]}"><span>${event[1]}</span></div>` : ""}
+      <p class="aside">Hush records every call too: in the Hush UI, open <b>Applications</b>, then
+        <b>${esc(appName())}</b>, and its <b>Activity</b> tab.</p>
+      ${all ? `<div class="result ok"><span>That's the whole flow. Next, a recap.</span></div>` : ""}`;
+  }
+
+  function storyRecap() {
+    const namespace = serviceAccount(setup?.agent?.subject)[1] || "<namespace>";
+    return `
+      <h1>Recap</h1>
+      <ul class="points">
+        <li>The agent holds no secret: its platform token is all it has.</li>
+        <li>One token exchange gives a Hush access token naming both you and the agent.</li>
+        <li>The agent reaches an app only when the app is assigned to it, and open to the user it acts for.</li>
+        <li>Every call is checked against the tools' policies. By default, a read goes through, a write waits for you,
+          and a delete is blocked.</li>
+        <li>Expenses sees you, in your own account. The gateway keeps your Expenses connection: the agent never sees it.</li>
+      </ul>
+      <h2>Clean up</h2>
+      <p>Uninstall the tutorial, before your API key expires: it takes Expenses out of Hush too.</p>
+      ${cmd(`helm uninstall ${setup?.release || "<release>"} -n ${namespace}`)}
+      <p>Then, in the Hush UI, delete the agent, and the API key unless it has expired.</p>
+      <div class="nav-row">${goTo("try", "Back")}</div>`;
+  }
+
+  const STORIES = { welcome: storyWelcome, agent: storyAgent, access: storyAccess, try: storyTry, recap: storyRecap };
+
+  // ---- The assistant -------------------------------------------------------------
+
+  const ICONS = {
+    logo: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>`,
+    trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>`,
+    refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>`,
+    close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
+    lock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`,
+    plug: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>`,
+  };
+
+  const firstName = () => (me.name || "").split(/\s+/)[0] || (me.email || "").split("@")[0];
+  const initials = () => {
+    const words = (me.name || me.email || "?").split(/[\s@.]+/).filter(Boolean);
+    return (words[0]?.[0] || "?").toUpperCase() + (words[1]?.[0] || "").toUpperCase();
+  };
+
+  function renderApp() {
+    const bar = `<div class="appbar"><span class="applogo">${ICONS.logo}</span>
+      <span class="appname"><b>Expenses Assistant</b><small>Your AI expenses helper</small></span>
+      ${me.signed_in ? `<details class="menu" id="app-menu"${app.menuOpen ? " open" : ""}>
+        <summary class="avatar" aria-label="Account">${esc(initials())}</summary>
+        <div class="menu-pop"><span class="who"><b>${esc(me.name || me.email)}</b>${me.name ? `<span>${esc(me.email)}</span>` : ""}</span>
+          <button class="abtn ghost small" type="button" data-app="signout">Sign out</button></div></details>` : ""}</div>`;
+    const kept = ["x-description", "x-amount", "x-category"].map((id) => [id, document.getElementById(id)?.value]);
+    if (!setHtml(document.getElementById("app"), bar + appBody())) return;
+    for (const [id, value] of kept) {
+      const input = document.getElementById(id);
+      if (input && value !== undefined) input.value = value;
+    }
+  }
+
+  function appBody() {
+    const center = (icon, title, text, actions = "") => `<div class="appbody center"><span class="hero">${icon}</span>
+      <h3>${title}</h3><p>${text}</p>${actions}</div>`;
+    const retry = `<button class="abtn ghost" type="button" data-app="list">Try again</button>`;
+    switch (app.phase) {
+      case "signed_out":
+        return center(ICONS.logo, "Your expense reports, handled",
+          "I keep your expense reports up to date: I list them, add new ones and tidy up old ones, for you.",
+          `${app.signinError ? `<p class="fine">${esc(app.signinError)}</p>` : ""}
+          <a class="abtn" href="/signin">Sign in with your company account</a>`);
+      case "loading":
+        return `<div class="appbody center"><span class="spin" aria-hidden="true"></span><p>Opening your expenses…</p></div>`;
+      case "connect":
+        return center(ICONS.plug, `Hi ${esc(firstName())}!`,
+          "To work on your expense reports, I need your Expenses account. You connect it once.",
+          app.connecting
+            ? `<p class="status wait">${spinner}<span>Waiting for you to finish in Expenses…</span></p>
+              <button class="abtn ghost small" type="button" data-app="list">Done? Check now</button>`
+            : `<button class="abtn" type="button" data-app="connect"${app.connectUrl ? "" : " disabled"}>Connect Expenses</button>`);
+      case "unavailable":
+        return center(ICONS.lock, "I can't reach Expenses for you",
+          "Your company hasn't given me access to Expenses yet.", retry);
+      case "refused":
+        return center(ICONS.lock, "I can't work for you",
+          "Your company hasn't allowed me to act for you.", retry);
+      case "error":
+        return center(ICONS.lock, "Something went wrong", "I couldn't reach Expenses.", `<span class="fine">${esc(app.message)}</span>${retry}`);
+      default:
+        return appReady();
+    }
+  }
+
+  function appReady() {
+    const rows = Array.isArray(app.expenses) ? app.expenses : [];
+    const total = rows.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+    const n = app.notice;
+    const busy = app.busy !== null;
+    return `<div class="appbody">
+      <div class="greet"><h3>Hi ${esc(firstName())}, here are your expenses</h3>
+        <button class="icon-btn" type="button" data-app="list" aria-label="Refresh"${busy ? " disabled" : ""}>${app.busy === "list" ? spinner : ICONS.refresh}</button></div>
+      ${n ? `<div class="bubble ${n.tone}" role="status">${n.waiting ? spinner : ""}<span class="text">${n.html}</span>
+        ${n.waiting ? "" : `<button class="icon-btn" type="button" data-app="dismiss" aria-label="Dismiss">${ICONS.close}</button>`}</div>` : ""}
+      <ul class="items">
+        ${rows.length ? rows.map((x) => `<li><span class="what"><b>${esc(x.description)}</b><span>${esc(x.category)}${x.date ? ` · ${esc(x.date)}` : ""}</span></span>
+          <span class="amt">${esc(money(x.amount))}</span>
+          <button class="icon-btn" type="button" data-app="delete" data-id="${esc(x.id)}" aria-label="Delete ${esc(x.description)}"${busy ? " disabled" : ""}>
+            ${app.busy === `delete:${x.id}` ? spinner : ICONS.trash}</button></li>`).join("")
+          + `<li class="total"><span class="what">Total</span><span class="amt">${esc(money(total))}</span></li>`
+          : `<li class="none">No expenses yet.</li>`}
+      </ul>
+      <form class="add" id="add-form">
+        <h4>Add an expense</h4>
+        <label class="wide">Description<input id="x-description" value="Hotel" required></label>
+        <label>Category<select id="x-category">${CATEGORIES.map((c) => `<option${c === "Lodging" ? " selected" : ""}>${c}</option>`).join("")}</select></label>
+        <label>Amount<input id="x-amount" value="210" inputmode="decimal" required></label>
+        <button class="abtn" type="submit"${busy ? " disabled" : ""}>${app.busy === "submit" ? spinner : ""}Add</button>
+      </form>
+    </div>`;
+  }
+
+  // What a call through the gateway came to, for everything but its own success.
+  function setPhaseFrom(r) {
+    switch (r.kind) {
+      case "connect": app.phase = "connect"; app.connectUrl = r.url; return;
+      case "not_available": app.phase = "unavailable"; return;
+      case "not_assigned": app.phase = "refused"; return;
+      case "signed_out": signedOut(r.message); return;
+      default:
+        if (r.error === "login_required") { signedOut(r.message); return; }
+        app.phase = "error"; app.message = r.message || "Something went wrong.";
+    }
+  }
+
+  async function appList({ quiet = false } = {}) {
+    if (!quiet) { app.busy = "list"; if (app.phase !== "ready" && app.phase !== "connect") app.phase = "loading"; render(); }
+    const r = await api("/api/expenses/list", {});
+    if (!me.signed_in) return;
+    app.busy = null;
+    if (r.kind === "done") {
+      const first = app.phase !== "ready";
+      app.phase = "ready";
+      app.expenses = r.data;
+      stopConnecting();
+      if (!done.has("try-list") || first && !lastEvent) lastEvent = "listed";
+      markDone("try-list");
+    } else if (!(quiet && r.kind === "connect")) {
+      setPhaseFrom(r);
+    }
+    render();
+    refreshCalls();
+  }
+
+  function startConnecting() {
+    if (app.connectUrl) window.open(app.connectUrl, "_blank", "noopener");
+    app.connecting = true;
+    render();
+    let polls = 0;
+    clearInterval(connectTimer);
+    connectTimer = setInterval(() => {
+      if (++polls > CONNECT_POLLS) { stopConnecting(); render(); return; }
+      if (!document.hidden) appList({ quiet: true });
+    }, CONNECT_POLL_MS);
+  }
+
+  function stopConnecting() {
+    clearInterval(connectTimer);
+    app.connecting = false;
+  }
+
+  // The agent no longer has the user's sign-in: back to signing in.
+  function signedOut(message = null) {
+    me = { signed_in: false };
+    token = null;
+    tokenError = null;
+    clearTimeout(consentTimer);
+    stopConnecting();
+    Object.assign(app, { phase: "signed_out", expenses: [], notice: null, busy: null, menuOpen: false,
+      signinError: message, signinRefused: false });
+    lastEvent = null;
+    consentAsked = false;
+    consentEverAsked = false;
+    forgetTries();
+    renderLog();
+  }
+
+  async function appSubmit(draft, approved = false) {
+    app.busy = "submit";
+    app.notice = null;
+    render();
+    const r = await api("/api/expenses/submit", draft);
+    if (!me.signed_in) return;
+    app.busy = null;
+    const what = `“${esc(draft.description)}” (${esc(money(draft.amount))})`;
+    if (r.kind === "done") {
+      app.notice = { tone: "ok", html: `Added ${what}.` };
+      lastEvent = approved || consentAsked ? "added" : consentEverAsked ? "added_again" : "added_directly";
+      consentAsked = false;
+      markDone("try-submit");
+      return appList({ quiet: true });
+    }
+    if (r.kind === "consent") {
+      app.notice = { tone: "wait", waiting: Boolean(r.request_id), html: `I need your OK before I add ${what}.
+        ${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">Review the request</a>` : "Approve it where Hush asks you."}
+        ${r.request_id ? "" : " Then add it again."}` };
+      lastEvent = "consent";
+      consentAsked = true;
+      consentEverAsked = true;
+      if (r.request_id) waitForConsent(r.request_id, draft);
+    } else if (r.kind === "blocked") {
+      app.notice = { tone: "no", html: "I'm not allowed to add expenses: your company's policy blocks it." };
+    } else if (r.kind === "error") {
+      app.notice = { tone: "no", html: `I couldn't add it: ${esc(r.message)}` };
+    } else {
+      setPhaseFrom(r);
+    }
+    render();
+    refreshCalls();
+  }
+
+  // Asks Hush, through the agent, until the request is decided; then adds it
+  // again, as the next exchange carries the approval.
+  function waitForConsent(requestId, draft) {
+    clearTimeout(consentTimer);
+    consentTimer = setTimeout(async () => {
+      const r = await api(`/api/consent/${encodeURIComponent(requestId)}`);
+      if (!me.signed_in) return;
+      if (r.status === "pending") return waitForConsent(requestId, draft);
+      if (r.status === "granted") return appSubmit(draft, true);
+      if (r.error === "login_required") { signedOut(r.message); render(); return; }
+      app.notice = r.status === "denied"
+        ? { tone: "no", html: "You declined, so I didn't add it." }
+        : r.status === "expired"
+          ? { tone: "no", html: "The approval request expired. Add it again to ask again." }
+          : { tone: "no", html: `I couldn't tell whether you approved: ${esc(r.message)}` };
+      if (r.status === "denied") lastEvent = "declined";
+      consentAsked = false;
+      render();
+    }, CONSENT_POLL_MS);
+  }
+
+  async function appDelete(id) {
+    const expense = app.expenses.find((x) => String(x.id) === String(id));
+    const what = expense ? `“${esc(expense.description)}”` : "it";
+    app.busy = `delete:${id}`;
+    app.notice = null;
+    render();
+    const r = await api("/api/expenses/delete", { expense_id: id });
+    if (!me.signed_in) return;
+    app.busy = null;
+    if (r.kind === "blocked") {
+      app.notice = { tone: "no", html: `I'm not allowed to delete ${what}: your company's policy blocks deleting expenses.` };
+      lastEvent = "blocked";
+      markDone("try-delete");
+    } else if (r.kind === "done") {
+      app.notice = { tone: "ok", html: `Deleted ${what}.` };
+      lastEvent = "deleted";
+      return appList({ quiet: true });
+    } else if (r.kind === "consent") {
+      app.notice = { tone: "wait", html: `I need your OK before I delete ${what}.
+        ${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">Review the request</a>, then` : "Approve it, then"} delete it again.` };
+    } else if (r.kind === "error") {
+      app.notice = { tone: "no", html: `I couldn't delete ${what}: ${esc(r.message)}` };
+    } else {
+      setPhaseFrom(r);
+    }
+    render();
+    refreshCalls();
+  }
+
+  // ---- Behind the assistant ------------------------------------------------------
+
+  async function loadToken() {
+    if (!me.signed_in || token) return;
+    const r = await api("/api/exchange");
+    if (!me.signed_in) return;
+    if (r.claims) {
+      token = r.claims;
+      tokenError = null;
+    } else if (r.error === "login_required") {
+      signedOut(r.message);
+      return render();
+    } else {
+      tokenError = { refused: r.status >= 400 && r.status < 500, message: r.message || "no answer" };
+    }
+    renderToken();
+  }
+
+  async function refreshCalls() {
+    if (!me.signed_in) { calls = null; renderLog(); return; }
+    const r = await api("/api/calls");
+    if (Array.isArray(r.calls)) calls = r.calls;
+    renderLog();
+  }
+
+  function renderLog() {
+    document.getElementById("log-sub").textContent = me.signed_in ? `calls on ${me.email}'s account, newest first` : "";
+    const log = document.getElementById("log");
+    if (!me.signed_in) { log.innerHTML = `<p class="empty">Sign in to the assistant to see the calls Expenses gets for you.</p>`; return; }
+    if (!calls || !calls.length) { log.innerHTML = `<p class="empty">No calls for ${esc(me.email)} yet.</p>`; return; }
+    const key = (c) => `${c.time}|${c.tool}|${c.result}`;
+    const fresh = seenCalls ? (c) => !seenCalls.has(key(c)) : () => false;
+    log.innerHTML = `<table class="log"><thead><tr><th>When</th><th>Account</th><th>Tool</th><th>Arguments</th><th>Result</th></tr></thead>
+      <tbody>${calls.map((c) => `<tr${fresh(c) ? ` class="new"` : ""}><td class="when">${esc(new Date(c.time).toLocaleTimeString())}</td>
+        <td class="mono nowrap">${esc(c.account)}</td><td class="mono nowrap">${esc(c.tool)}</td>
+        <td class="mono">${esc(Object.entries(c.arguments || {}).map(([k, v]) => `${k}: ${v}`).join(", "))}</td>
+        <td>${esc(c.result)}</td></tr>`).join("")}</tbody></table>`;
+    seenCalls = new Set(calls.map(key));
+  }
+
+  function renderToken() {
+    const box = document.getElementById("claims");
+    if (!token) {
+      box.innerHTML = `<p class="empty">${!me.signed_in ? "Appears once you sign in to the assistant."
+        : tokenError ? (tokenError.refused ? `Hush refused the token exchange: ${esc(tokenError.message)}`
+          : `The token exchange failed: ${esc(tokenError.message.replace(/^the exchange failed: /, ""))}`)
+        : "The agent hasn't got one for you yet."}</p>`;
+      return;
+    }
+    const shown = ["sub", "email", "act", "aud"].filter((k) => k in token);
+    const value = (k) => typeof token[k] === "object" ? JSON.stringify(token[k]) : token[k];
+    box.innerHTML = `<div class="claims">${shown.map((k) =>
+      `<span class="k${k === "act" ? " hl" : ""}">${esc(k)}</span><span class="v${k === "act" ? " hl" : ""}">${esc(value(k))}</span>`).join("")}
+      <span class="cap">You are <code>sub</code>; <code>act</code> is the agent acting for you. Hush issued it in the
+        token exchange.</span></div>`;
+  }
+
+  // ---- Page ----------------------------------------------------------------------
+
+  function render() {
+    const key = STEPS[step].key;
+    if (key === "welcome" || key === "recap") markDone(key);
+    if (TRY_TASKS.every((k) => done.has(k))) markDone("try");
+    setHtml(document.getElementById("stepbar"), STEPS.map((s, i) =>
+      `<li><button type="button" data-step="${i}" class="${isDone(s.key) ? "done" : ""}"${i === step ? ` aria-current="step"` : ""}>
+        <span class="n">${isDone(s.key) && i !== step ? "✓" : i + 1}</span>${esc(s.title)}</button></li>`).join(""));
+
+    const trying = key === "try";
+    document.getElementById("layout").classList.toggle("with-app", trying);
+    document.getElementById("app-col").hidden = !trying;
+    document.getElementById("behind").hidden = !trying;
+    setHtml(document.getElementById("story"), `<span class="eyebrow">Step ${step + 1} of ${STEPS.length}</span>${STORIES[key]()}`);
+    if (trying) {
+      renderApp();
+      renderToken();
+    }
+  }
+
+  function show(index) {
+    step = index;
+    save(STEP_KEY, step);
+    history.replaceState(null, "", `#${STEPS[step].key}`);
+    render();
+    window.scrollTo({ top: 0 });
+    if (STEPS[step].key === "try") {
+      if (me.signed_in && app.phase === "loading" && app.busy !== "list") appList();
+      loadToken();
+      refreshCalls();
+    }
+  }
+
+  document.addEventListener("click", async (event) => {
+    const target = event.target.closest("button");
+    if (!target) return;
+    if (target.dataset.copy !== undefined) {
+      try { await navigator.clipboard.writeText(target.dataset.copy); target.textContent = "Copied"; }
+      catch (error) { target.textContent = "Copy failed"; }
+      setTimeout(() => { target.textContent = "Copy"; }, 1500);
+    } else if (target.dataset.step !== undefined) {
+      show(Number(target.dataset.step));
+    } else if (target.dataset.check) {
+      runCheck(target.dataset.check);
+    } else if (target.dataset.app === "list") {
+      appList();
+    } else if (target.dataset.app === "connect") {
+      startConnecting();
+    } else if (target.dataset.app === "delete") {
+      appDelete(target.dataset.id);
+    } else if (target.dataset.app === "dismiss") {
+      app.notice = null;
+      render();
+    } else if (target.dataset.app === "signout") {
+      await api("/api/signout", {});
+      signedOut();
+      render();
+    }
+  });
+
+  document.addEventListener("submit", (event) => {
+    if (event.target.id !== "add-form") return;
+    event.preventDefault();
+    appSubmit({
+      description: document.getElementById("x-description").value,
+      amount: document.getElementById("x-amount").value,
+      category: document.getElementById("x-category").value,
+    });
+  });
+
+  document.addEventListener("toggle", (event) => {
+    if (event.target.id === "app-menu") app.menuOpen = event.target.open;
+  }, true);
+
+  // Back from connecting Expenses in the other tab: look at once.
+  window.addEventListener("focus", () => { if (app.connecting) appList({ quiet: true }); });
+
+  async function loadSetup() {
+    setup = await api("/api/setup");
+    if (!setup.agent) setup = null;
+  }
+
+  async function start() {
+    render();
+    renderLog();
+    // Back from a sign-in Hush refused.
+    const params = new URLSearchParams(location.search);
+    if (params.has("signin_error")) {
+      app.signinError = params.get("signin_error");
+      app.signinRefused = true;
+      history.replaceState(null, "", location.pathname + location.hash);
+    }
+    [, me] = await Promise.all([loadSetup(), api("/api/me")]);
+    if (me.signed_in === undefined) me = { signed_in: false };
+    if (!me.signed_in) {
+      app.phase = "signed_out";
+      forgetTries();
+    }
+    render();
+    if (me.signed_in && STEPS[step].key === "try") {
+      appList();
+      loadToken();
+    }
+    refreshCalls();
+    setInterval(() => { if (!document.hidden && STEPS[step].key === "try") refreshCalls(); }, LOG_POLL_MS);
+    // Hush gets Expenses in the background: show it once it does.
+    setInterval(async () => {
+      if (document.hidden || !["welcome", "access"].includes(STEPS[step].key) || inHush().state === "ready") return;
+      await loadSetup();
+      render();
+    }, SETUP_POLL_MS);
+  }
+
+  start();
+</script>
+</body>
+</html>

@@ -4,15 +4,16 @@ Each browser gets its own session (a cookie) once it starts signing in,
 holding its own sign-in: the agent acts for whoever is signed in in the
 browser that asks.
 
-For now, bare endpoints to open in a browser or with curl. The tutorial page
-comes on top of them.
+The tutorial page drives it all through the agent's API, from the browser:
+the session cookie comes along by itself.
 """
 
 import dataclasses
-import html
 import logging
 import math
+import pathlib
 import secrets
+from urllib.parse import urlencode
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -23,23 +24,14 @@ from starlette.routing import Route
 
 from agent.gateway import ExpensesThroughGateway, Outcome
 from agent.identity import HushRefused, Identity, Session, claims
+from agent.tutorial import ExpensesSide, workload
 
 log = logging.getLogger("agent")
 
 SESSION_COOKIE = "agent_session"
-SHOWN_CLAIMS = ("sub", "email", "name", "act", "aud", "iss", "exp")
+SHOWN_CLAIMS = ("sub", "email", "act", "aud")
 
-INDEX = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Hosted agent</title></head>
-<body>
-<h1>Hosted agent</h1>
-<ul>
-  <li><a href="/signin">Sign in for the agent</a></li>
-  <li><a href="/api/me">Who is signed in</a></li>
-  <li><a href="/api/exchange">Exchange tokens, and show what the agent's token says</a></li>
-</ul>
-{curl}
-</body></html>"""
+PAGE = (pathlib.Path(__file__).parent / "page.html").read_text()
 
 
 class BadInput(Exception):
@@ -83,6 +75,13 @@ def refused(e: HushRefused) -> JSONResponse:
     }, status_code=403 if e.status in (400, 403) else e.status)
 
 
+def back_to_page(e: HushRefused) -> RedirectResponse:
+    """A refused sign-in, back on the page that started it: the browser came
+    here by navigating, not from the page's script."""
+    log.warning("sign-in refused: %s %s", e.error, e.description)
+    return RedirectResponse(f"/?{urlencode({'signin_error': e.description or e.error})}")
+
+
 def failed(what: str, e: Exception) -> JSONResponse:
     log.exception("%s failed", what)
     return JSONResponse({"ok": False, "message": f"{what} failed: {e}"}, status_code=502)
@@ -121,19 +120,48 @@ def expense_id_of(body: dict) -> int:
     raise BadInput("expense_id: a whole number is needed")
 
 
-def routes(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str) -> list[Route]:
+def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: ExpensesSide,
+           release: str | None) -> list[Route]:
     async def index(request: Request) -> HTMLResponse:
-        if request.state.session_id is None:
-            return HTMLResponse(INDEX.format(curl="<p>Sign in, and this page shows curl commands that act as you.</p>"))
-        session = f"-b {SESSION_COOKIE}={request.state.session_id}"
-        curl = "\n".join([
-            f"curl {session} {agent_url}/api/exchange",
-            f"curl {session} -X POST {agent_url}/api/expenses/list",
-            f"curl {session} -X POST {agent_url}/api/expenses/submit -d '{{\"description\": \"Hotel\", \"amount\": 210}}'",
-            f"curl {session} -X POST {agent_url}/api/expenses/delete -d '{{\"expense_id\": 1001}}'",
-            f"curl {session} {agent_url}/api/consent/<request id>",
-        ])
-        return HTMLResponse(INDEX.format(curl=f"<p>With curl, as this browser's session:</p><pre>{html.escape(curl)}</pre>"))
+        return HTMLResponse(PAGE, headers={"Cache-Control": "no-store"})
+
+    async def setup(request: Request) -> JSONResponse:
+        """What the page's setup steps show: the values to enter in Hush, and
+        whether the reader has done them."""
+        try:
+            issuer, error = (await identity.gateway()).issuer, None
+        except Exception as e:
+            log.warning("reading the gateway's sign-in details failed: %s", e)
+            issuer, error = None, str(e)
+        agent_id = None
+        try:
+            registration = await identity.registration()
+            agent_id = registration["id"]
+            hush = {"id": agent_id, "name": registration["name"]}
+        except HushRefused as e:
+            # Most likely not registered yet: the reader's to do, not a failure.
+            # `reason` is Hush's own words, under the agent's explanation.
+            cause = e.__cause__ if isinstance(e.__cause__, HushRefused) else e
+            hush = {"error": e.description or e.error, "reason": cause.description or cause.error,
+                    "unknown": e.error == "invalid_client"}
+        except Exception as e:
+            log.warning("asking Hush about the agent failed: %s", e)
+            hush = {"error": str(e), "reason": str(e), "unknown": False}
+        about = await expenses_side.about()
+        assigned = await expenses_side.assigned_to(agent_id) if agent_id else {"assigned": None, "error": None}
+        return JSONResponse({
+            "release": release,
+            "agent": {**workload(identity), "hush": hush},
+            "gateway": {"url": identity.gateway_url, "issuer": issuer, "error": error},
+            "expenses": {"app": expenses.app, "url": about.get("url"), "access_code": about.get("access_code"),
+                         "in_hush": await expenses_side.in_hush(), "assigned": assigned},
+        })
+
+    async def calls(request: Request) -> JSONResponse:
+        user = request.state.session.user
+        account = str(user.claims.get("email") or "").lower() if user else ""
+        return JSONResponse({"account": account or None,
+                             "calls": await expenses_side.calls(account) if account else []})
 
     async def healthz(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
@@ -142,16 +170,16 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str)
         try:
             return RedirectResponse(await identity.sign_in_url(request.state.session))
         except HushRefused as e:
-            return refused(e)
+            return back_to_page(e)
 
     async def callback(request: Request):
         params = request.query_params
         if "error" in params:
-            return refused(HushRefused("sign-in", 403, params["error"], params.get("error_description", "")))
+            return back_to_page(HushRefused("sign-in", 403, params["error"], params.get("error_description", "")))
         try:
             await identity.finish_sign_in(request.state.session, params.get("state", ""), params.get("code", ""))
         except HushRefused as e:
-            return refused(e)
+            return back_to_page(e)
         return RedirectResponse("/")
 
     async def me(request: Request) -> JSONResponse:
@@ -175,7 +203,13 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str)
         return JSONResponse({"ok": True, "claims": shown})
 
     async def list_expenses(request: Request) -> JSONResponse:
-        return outcome(await expenses.run(request.state.session, "list_expenses", {}))
+        result = await expenses.run(request.state.session, "list_expenses", {})
+        if result.kind == "done" and isinstance(result.data, dict):
+            # One expense comes back as one text item: itself, not a list.
+            result.data = [result.data]
+        elif result.kind == "done" and not isinstance(result.data, list):
+            result = Outcome("error", f"Expenses answered with something other than a list: {str(result.data)[:200]}")
+        return outcome(result)
 
     async def submit_expense(request: Request) -> JSONResponse:
         body = await body_of(request)
@@ -204,6 +238,8 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str)
         Route("/healthz", healthz),
         Route("/signin", sign_in),
         Route("/callback", callback),
+        Route("/api/setup", setup),
+        Route("/api/calls", calls),
         Route("/api/me", me),
         Route("/api/signout", sign_out, methods=["POST"]),
         Route("/api/exchange", exchange),
@@ -218,9 +254,13 @@ async def bad_input(request: Request, e: BadInput) -> JSONResponse:
     return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
 
 
-def build(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str) -> Starlette:
-    """`agent_url` is where browsers reach the agent."""
+def build(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str,
+          expenses_side: ExpensesSide | None = None, release: str | None = None) -> Starlette:
+    """`agent_url` is where browsers reach the agent. `expenses_side` reads
+    what Expenses saw, for the page. `release` is the tutorial's Helm
+    release, for the page's clean-up command."""
     agent_url = agent_url.rstrip("/")
-    return Starlette(routes=routes(identity, expenses, agent_url),
+    expenses_side = expenses_side or ExpensesSide(identity.http, None)
+    return Starlette(routes=routes(identity, expenses, expenses_side, release),
                      middleware=[Middleware(Sessions, secure=agent_url.startswith("https://"))],
                      exception_handlers={BadInput: bad_input})

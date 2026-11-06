@@ -1,4 +1,4 @@
-"""What Expenses saw, for the tutorial page to show.
+"""What Expenses saw, and where it is, for the tutorial page to show.
 
 Served on a port of its own that stays inside the cluster, never on the
 app's public address.
@@ -14,11 +14,15 @@ from starlette.routing import Route
 from expenses.store import Store
 
 
-def build(store: Store) -> Starlette:
+def build(store: Store, public_url: str, access_code: str | None = None) -> Starlette:
     async def calls(request: Request) -> JSONResponse:
         return JSONResponse([dataclasses.asdict(c) for c in reversed(store.calls)])
+
+    async def about(request: Request) -> JSONResponse:
+        # The public address may come from a tunnel, known only once Expenses runs.
+        return JSONResponse({"url": public_url, "access_code": access_code})
 
     async def healthz(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
-    return Starlette(routes=[Route("/calls", calls), Route("/healthz", healthz)])
+    return Starlette(routes=[Route("/calls", calls), Route("/about", about), Route("/healthz", healthz)])

@@ -5,6 +5,7 @@ import json
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.types import CallToolResult, TextContent
 
 APP = "custom-expenses"
 CONNECT_URL = "https://gateway.example.com/connect/abc"
@@ -20,7 +21,7 @@ BLOCK_NOTICE = (
 class FakeGateway:
     def __init__(self, connection: str = "connected", assigned: bool = True, policy: dict | None = None,
                  search_reply: str | None = None, connect_reply: str = CONNECT_URL, fail: bool = False,
-                 connection_lost: str | None = None, served: bool = True):
+                 connection_lost: str | None = None, served: bool = True, expenses: list[dict] | None = None):
         self.connection = connection
         self.served = served
         self.assigned = assigned
@@ -29,6 +30,7 @@ class FakeGateway:
         self.connect_reply = connect_reply
         self.fail = fail
         self.connection_lost = connection_lost
+        self.expenses = expenses
         self.consent = "pending"
         self.calls: list[tuple[str, dict]] = []
 
@@ -49,10 +51,13 @@ class FakeGateway:
             return self.search_reply or json.dumps([{"name": f"{APP}__{query}"}])
 
         @mcp.tool(structured_output=False)
-        def hush_call_tool(name: str, arguments: dict) -> str:
+        def hush_call_tool(name: str, arguments: dict) -> str | CallToolResult:
             tool = name.split("__")[-1]
             if self.connection_lost == "disconnected":
                 return f'{APP} is not connected; call hush_connect with app="{APP}"'
+            if self.connection_lost == "rejected":
+                return (f'`{APP}` rejected the credentials it was sent. Call hush_connect with app="{APP}" '
+                f"to reconnect, or verify them if `{APP}` uses static credentials.")
             if self.connection_lost == "expired":
                 return f'{APP} connection expired or was revoked; call hush_connect with app="{APP}" to reconnect'
             rule = self.policy.get(tool)
@@ -62,6 +67,10 @@ class FakeGateway:
                 return (f'Tool "{tool}" on "{APP}" requires the user\'s consent before it can run.\n'
                         "1. Call the request_user_consent tool ...")
             self.calls.append((tool, arguments))
+            if self.expenses is not None and tool == "list_expenses":
+                # As Expenses answers a list: an item per expense, and the list wrapped.
+                return CallToolResult(content=[TextContent(type="text", text=json.dumps(e)) for e in self.expenses],
+                                      structured_content={"result": self.expenses})
             return json.dumps({"tool": tool, "arguments": arguments})
 
         @mcp.tool(structured_output=False)

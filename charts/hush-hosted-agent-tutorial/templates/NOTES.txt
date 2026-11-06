@@ -7,26 +7,20 @@ Open the agent's page:
 
   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ $agent }} {{ .Values.agent.port }}:{{ .Values.agent.port }}
 
-then browse to {{ .Values.agent.url }}.
+then browse to {{ .Values.agent.url }} and follow the steps.
 {{- if include "tutorial.tunnel" . }}
 
-Expenses is public, through a Cloudflare quick tunnel. Its address:
-
-  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "tutorial.componentName" (list . "expenses") }} | grep "Expenses is at"
-
-Signing in to Expenses asks for this access code:
-
-  kubectl get secret -n {{ .Release.Namespace }} {{ include "tutorial.expensesSecret" . }} -o jsonpath='{.data.code}' | base64 -d
+Expenses is public, through a Cloudflare quick tunnel: the page shows its
+address, and the access code its sign-in asks for.
 {{- else }}
 
 Expenses is at {{ .Values.expenses.url }}: serve the {{ include "tutorial.componentName" (list . "expenses") }} Service there.
 {{- end }}
 
 The tutorial puts Expenses in Hush as "Expenses (tutorial)": in the catalog
-as {{ .Values.expenses.name }}, and on your gateway for all users. Assign it to
-your agent in Hush (Applications, then its Assignments). Whether Hush has it:
-
-  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "tutorial.componentName" (list . "setup") }}
+as {{ .Values.expenses.name }}, and on your Hush Identity Gateway for all
+users. Assign it to your agent in Hush (Applications, then its Assignments):
+the page shows how.
 
 Uninstall before the API key expires: it also takes Expenses out of Hush.
 

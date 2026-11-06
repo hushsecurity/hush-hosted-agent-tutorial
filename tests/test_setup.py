@@ -7,7 +7,7 @@ import pytest
 
 import setup.__main__ as setup_main
 from setup import hush
-from setup.__main__ import explain, status_app
+from setup.__main__ import Setup, explain, status_app
 from tests.fake_hush_api import API, KEY, FakeHushAPI
 
 pytestmark = pytest.mark.anyio
@@ -102,12 +102,45 @@ def test_the_api_and_the_gateway_come_from_its_issuer():
 
 
 async def test_ready_only_once_expenses_is_in_hush():
-    status = {"state": "working", "error": None}
-    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=status_app(status)), base_url="http://setup") as c:
+    setup = Setup(FakeHushAPI().client())
+    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=status_app(setup)), base_url="http://setup") as c:
         assert (await c.get("/ready")).status_code == 503
-        status["state"] = "ready"
+        setup.status["state"] = "ready"
         assert (await c.get("/ready")).status_code == 200
         assert (await c.get("/status")).json()["state"] == "ready"
+
+
+def agent_rule(op: str, value) -> dict:
+    return {"all_of": [{"any_of": [{"source": "agent", "property": "id", "op": op, "value": value}]}]}
+
+
+async def test_tells_whether_expenses_is_assigned_to_the_agent():
+    fake = FakeHushAPI()
+    setup = Setup(fake.client())
+    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=status_app(setup)), base_url="http://setup") as c:
+        assert (await c.get("/assigned/agt-1")).json() == {"assigned": None, "error": None}
+
+        setup.api, setup.app_id = api_for(fake), (await hush.put(api_for(fake), EXPENSES))["id"]
+        assert (await c.get("/assigned/agt-1")).json()["assigned"] is False
+
+        app = fake.apps[setup.app_id]
+        app["assignments"] = [{"all_of": [{"any_of": [{"source": "user", "property": "email", "op": "eq",
+                                                       "value": "agt-1"}]}]}, agent_rule("neq", "agt-1")]
+        assert (await c.get("/assigned/agt-1")).json()["assigned"] is False
+        app["assignments"].append(agent_rule("in", "agt-10"))
+        assert (await c.get("/assigned/agt-1")).json()["assigned"] is False
+        app["assignments"].append(agent_rule("in", ["agt-0", "agt-1"]))
+        assert (await c.get("/assigned/agt-1")).json()["assigned"] is True
+        app["assignments"] = [agent_rule("eq", "agt-1")]
+        assert (await c.get("/assigned/agt-1")).json()["assigned"] is True
+
+
+async def test_a_failed_assignment_check_is_reported():
+    fake = FakeHushAPI()
+    setup = Setup(fake.client())
+    setup.api, setup.app_id = api_for(fake), "app-gone"
+    assert (await setup.assigned_to("agt-1"))["assigned"] is None
+    assert "404" in (await setup.assigned_to("agt-1"))["error"]
 
 
 async def test_an_app_the_tutorial_did_not_make_is_left_alone():
@@ -164,10 +197,10 @@ async def test_a_tunnel_without_an_address_is_a_failed_status(monkeypatch):
     async def no_address(http, with_url):
         raise RuntimeError("the tunnel reported no address")
 
-    status = {"state": "working", "error": None}
+    setup = Setup(FakeHushAPI().client())
     monkeypatch.setattr(setup_main, "expenses_in_hush", no_address)
     monkeypatch.setattr(setup_main, "RETRY_SECONDS", 0.01)
     with pytest.raises(TimeoutError):
         async with asyncio.timeout(0.05):
-            await setup_main.put(status)
-    assert status == {"state": "failed", "error": "the tunnel reported no address"}
+            await setup.put()
+    assert setup.status == {"state": "failed", "error": "the tunnel reported no address"}

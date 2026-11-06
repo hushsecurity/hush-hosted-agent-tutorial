@@ -18,12 +18,16 @@ def app_for(hush: FakeHush, tmp_path, agent_url: str = AGENT_URL):
     return web.build(identity, ExpensesThroughGateway(identity, "custom-expenses"), agent_url)
 
 
-async def signed_in_client(hush: FakeHush, tmp_path) -> httpx2.AsyncClient:
-    app = app_for(hush, tmp_path)
-    client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL)
+async def sign_in_with(client: httpx2.AsyncClient) -> None:
     sign_in = await client.get("/signin")
     state = parse_qs(urlsplit(sign_in.headers["location"]).query)["state"][0]
     assert (await client.get("/callback", params={"state": state, "code": "code-1"})).status_code in (302, 307)
+
+
+async def signed_in_client(hush: FakeHush, tmp_path) -> httpx2.AsyncClient:
+    app = app_for(hush, tmp_path)
+    client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL)
+    await sign_in_with(client)
     return client
 
 
@@ -47,8 +51,9 @@ async def test_a_sign_in_hush_refuses_keeps_no_session(tmp_path):
     app = app_for(FakeHush(registered=False), tmp_path)
     async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL) as client:
         resp = await client.get("/signin")
-    assert resp.status_code == 401
-    assert "registered in Hush?" in resp.json()["message"]
+    assert resp.status_code == 307
+    assert parse_qs(urlsplit(resp.headers["location"]).query)["signin_error"][0].startswith(
+        "Hush didn't accept the agent's identity")
     assert "set-cookie" not in resp.headers
 
 
@@ -56,8 +61,8 @@ async def test_a_refused_sign_in_is_reported(tmp_path):
     app = app_for(FakeHush(), tmp_path)
     async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL) as client:
         resp = await client.get("/callback", params={"error": "access_denied", "error_description": "nope"})
-    assert resp.status_code == 403
-    assert resp.json()["message"] == "nope"
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/?signin_error=nope"
 
 
 async def test_another_browser_is_not_signed_in(tmp_path):
@@ -143,3 +148,39 @@ async def test_a_session_the_agent_no_longer_has_is_told_to_sign_in_again(tmp_pa
 
     fresh = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app_for(FakeHush(), tmp_path)), base_url=AGENT_URL)
     assert (await fresh.get("/api/exchange")).json()["message"] == "sign in first"
+
+
+NO_OUTCOME = {"message": "", "data": None, "url": None, "request_id": None}
+
+
+async def test_a_session_the_agent_no_longer_has_reads_as_signed_out(tmp_path):
+    client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app_for(FakeHush(), tmp_path)),
+                                base_url=AGENT_URL, cookies={web.SESSION_COOKIE: "from-before-a-restart"})
+    listed = (await client.post("/api/expenses/list")).json()
+    assert listed["kind"] == "signed_out"
+    assert "sign in again" in listed["message"]
+
+
+@pytest.mark.parametrize("data, expected", [
+    ([{"id": 1}], [{"id": 1}]),
+    ({"id": 1}, [{"id": 1}]),
+    ([], []),
+])
+async def test_expenses_listed_are_a_list(tmp_path, monkeypatch, data, expected):
+    async def run(self, session, tool, arguments):
+        return Outcome("done", data=data)
+
+    monkeypatch.setattr(ExpensesThroughGateway, "run", run)
+    client = await signed_in_client(FakeHush(), tmp_path)
+    assert (await client.post("/api/expenses/list")).json() == {**NO_OUTCOME, "kind": "done", "data": expected}
+
+
+async def test_a_list_answer_that_isnt_a_list_is_an_error(tmp_path, monkeypatch):
+    async def run(self, session, tool, arguments):
+        return Outcome("done", data="Expenses is down for maintenance")
+
+    monkeypatch.setattr(ExpensesThroughGateway, "run", run)
+    client = await signed_in_client(FakeHush(), tmp_path)
+    listed = (await client.post("/api/expenses/list")).json()
+    assert listed["kind"] == "error"
+    assert "Expenses is down for maintenance" in listed["message"]

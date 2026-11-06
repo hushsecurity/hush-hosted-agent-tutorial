@@ -55,6 +55,7 @@ class Outcome:
                      at `url` when there is one
       blocked        the gateway's policy blocks the call
       not_assigned   Hush refused the exchange: the agent may not act for the user
+      signed_out     the user's sign-in is gone (the agent restarted, or it expired)
       not_available  Expenses isn't on the gateway for this user and agent
       refused        Hush refused something else
       error          anything else
@@ -77,6 +78,8 @@ class ExpensesThroughGateway:
         try:
             return await self._run(session, tool, arguments)
         except HushRefused as e:
+            if e.error == "login_required":
+                return Outcome("signed_out", e.description or e.error)
             return Outcome("not_assigned" if e.not_assigned else "refused", e.description or e.error)
         except Exception as e:
             log.exception("%s through the gateway failed", tool)
@@ -147,7 +150,8 @@ class ExpensesThroughGateway:
             return Outcome("blocked", text.split(POLICY_NOTICE)[0].strip())
         if consent := CONSENT_NEEDED.match(text):
             return await self._request_consent(gateway, tool=consent.group(1), app=consent.group(2))
-        if text.startswith((f"{self.app} is not connected", f"{self.app} connection expired")):
+        if text.startswith((f"{self.app} is not connected", f"{self.app} connection expired",
+                            f"`{self.app}` rejected the credentials")):
             return await self._connect(gateway)
         if result.is_error:
             return Outcome("error", text)
@@ -179,9 +183,12 @@ def _text(result) -> str:
 
 def _json(result) -> Any:
     """A tool's answer as data. A tool returning a list may answer with one
-    text item per element."""
-    if result.structured_content is not None:
-        return result.structured_content
+    text item per element, or with the list wrapped as {"result": [...]}."""
+    structured = result.structured_content
+    if isinstance(structured, dict) and list(structured) == ["result"]:
+        return structured["result"]
+    if structured is not None:
+        return structured
     items = [_parse(c.text) for c in result.content if getattr(c, "type", "") == "text"]
     return items[0] if len(items) == 1 else items
 

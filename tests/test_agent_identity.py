@@ -161,6 +161,25 @@ async def test_a_refused_refresh_signs_the_user_out(tmp_path, monkeypatch):
         raise HushRefused(step, 400, "invalid_grant", "refresh token revoked")
 
     monkeypatch.setattr(identity, "_token", refused)
-    with pytest.raises(HushRefused):
+    with pytest.raises(HushRefused) as signed_out:
         await identity.user_token(session)
     assert session.user is None
+    # Asked to sign in again at once, not shown Hush's refusal first.
+    assert signed_out.value.error == "login_required"
+    assert "sign in again" in signed_out.value.description
+
+
+async def test_hush_failing_a_refresh_keeps_the_user_signed_in(tmp_path, monkeypatch):
+    identity = identity_for(FakeHush(), tmp_path)
+    session = Session()
+    await sign_in(identity, session)
+    session.user.expires_at = time.time() + 10
+
+    async def failing(step, form):
+        raise HushRefused(step, 503, "", "Service Unavailable")
+
+    monkeypatch.setattr(identity, "_token", failing)
+    with pytest.raises(HushRefused) as failed:
+        await identity.user_token(session)
+    assert failed.value.status == 503
+    assert session.user is not None
