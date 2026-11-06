@@ -8,8 +8,10 @@ For now, bare endpoints to open in a browser or with curl. The tutorial page
 comes on top of them.
 """
 
+import dataclasses
 import html
 import logging
+import math
 import secrets
 
 from starlette.applications import Starlette
@@ -19,6 +21,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.routing import Route
 
+from agent.gateway import ExpensesThroughGateway, Outcome
 from agent.identity import HushRefused, Identity, Session, claims
 
 log = logging.getLogger("agent")
@@ -37,6 +40,10 @@ INDEX = """<!doctype html>
 </ul>
 {curl}
 </body></html>"""
+
+
+class BadInput(Exception):
+    pass
 
 
 class Sessions(BaseHTTPMiddleware):
@@ -81,11 +88,51 @@ def failed(what: str, e: Exception) -> JSONResponse:
     return JSONResponse({"ok": False, "message": f"{what} failed: {e}"}, status_code=502)
 
 
-def routes(identity: Identity, agent_url: str) -> list[Route]:
+def outcome(result: Outcome) -> JSONResponse:
+    return JSONResponse(dataclasses.asdict(result))
+
+
+async def body_of(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except ValueError:
+        raise BadInput("send a JSON object")
+    if not isinstance(body, dict):
+        raise BadInput("send a JSON object")
+    return body
+
+
+def amount_of(body: dict) -> float:
+    try:
+        amount = float(body["amount"])
+    except (KeyError, TypeError, ValueError):
+        raise BadInput("amount: a number is needed")
+    if not math.isfinite(amount) or amount <= 0:
+        raise BadInput("amount: must be more than zero")
+    return amount
+
+
+def expense_id_of(body: dict) -> int:
+    value = body.get("expense_id")
+    if isinstance(value, str) and value.strip().isdecimal():
+        return int(value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    raise BadInput("expense_id: a whole number is needed")
+
+
+def routes(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str) -> list[Route]:
     async def index(request: Request) -> HTMLResponse:
         if request.state.session_id is None:
             return HTMLResponse(INDEX.format(curl="<p>Sign in, and this page shows curl commands that act as you.</p>"))
-        curl = f"curl -b {SESSION_COOKIE}={request.state.session_id} {agent_url}/api/exchange"
+        session = f"-b {SESSION_COOKIE}={request.state.session_id}"
+        curl = "\n".join([
+            f"curl {session} {agent_url}/api/exchange",
+            f"curl {session} -X POST {agent_url}/api/expenses/list",
+            f"curl {session} -X POST {agent_url}/api/expenses/submit -d '{{\"description\": \"Hotel\", \"amount\": 210}}'",
+            f"curl {session} -X POST {agent_url}/api/expenses/delete -d '{{\"expense_id\": 1001}}'",
+            f"curl {session} {agent_url}/api/consent/<request id>",
+        ])
         return HTMLResponse(INDEX.format(curl=f"<p>With curl, as this browser's session:</p><pre>{html.escape(curl)}</pre>"))
 
     async def healthz(request: Request) -> JSONResponse:
@@ -127,6 +174,31 @@ def routes(identity: Identity, agent_url: str) -> list[Route]:
         shown = {k: v for k, v in claims(token).items() if k in SHOWN_CLAIMS}
         return JSONResponse({"ok": True, "claims": shown})
 
+    async def list_expenses(request: Request) -> JSONResponse:
+        return outcome(await expenses.run(request.state.session, "list_expenses", {}))
+
+    async def submit_expense(request: Request) -> JSONResponse:
+        body = await body_of(request)
+        return outcome(await expenses.run(request.state.session, "submit_expense", {
+            "description": str(body.get("description") or "Expense"),
+            "amount": amount_of(body),
+            "category": str(body.get("category") or "Other"),
+        }))
+
+    async def delete_expense(request: Request) -> JSONResponse:
+        body = await body_of(request)
+        return outcome(await expenses.run(request.state.session, "delete_expense",
+                                          {"expense_id": expense_id_of(body)}))
+
+    async def consent(request: Request) -> JSONResponse:
+        try:
+            status = await expenses.consent_status(request.state.session, request.path_params["request_id"])
+        except HushRefused as e:
+            return refused(e)
+        except Exception as e:
+            return failed("the consent check", e)
+        return JSONResponse({"status": status})
+
     return [
         Route("/", index),
         Route("/healthz", healthz),
@@ -135,11 +207,20 @@ def routes(identity: Identity, agent_url: str) -> list[Route]:
         Route("/api/me", me),
         Route("/api/signout", sign_out, methods=["POST"]),
         Route("/api/exchange", exchange),
+        Route("/api/expenses/list", list_expenses, methods=["POST"]),
+        Route("/api/expenses/submit", submit_expense, methods=["POST"]),
+        Route("/api/expenses/delete", delete_expense, methods=["POST"]),
+        Route("/api/consent/{request_id}", consent),
     ]
 
 
-def build(identity: Identity, agent_url: str) -> Starlette:
+async def bad_input(request: Request, e: BadInput) -> JSONResponse:
+    return JSONResponse({"ok": False, "message": str(e)}, status_code=400)
+
+
+def build(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str) -> Starlette:
     """`agent_url` is where browsers reach the agent."""
     agent_url = agent_url.rstrip("/")
-    return Starlette(routes=routes(identity, agent_url),
-                     middleware=[Middleware(Sessions, secure=agent_url.startswith("https://"))])
+    return Starlette(routes=routes(identity, expenses, agent_url),
+                     middleware=[Middleware(Sessions, secure=agent_url.startswith("https://"))],
+                     exception_handlers={BadInput: bad_input})

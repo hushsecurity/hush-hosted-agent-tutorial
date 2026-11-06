@@ -1,0 +1,193 @@
+"""The agent's work: calling Expenses through the gateway, for the user.
+
+The agent never talks to Expenses directly, and never sees the user's
+Expenses token. It calls the gateway with the token naming both the user and
+the agent, and the gateway checks each call, then calls Expenses with the
+user's own Expenses connection.
+
+The gateway serves any MCP client. Its tools (hush_list_apps,
+hush_search_tools, hush_call_tool, ...) answer in plain words meant for an
+LLM; this scripted agent reads the few answers it needs to tell apart.
+"""
+
+import contextlib
+import dataclasses
+import json
+import logging
+import re
+from typing import Any
+
+from mcp import ClientSession
+from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
+
+from agent.identity import HushRefused, Identity, Session
+
+log = logging.getLogger("agent")
+
+
+class _SessionEndAccepted(logging.Filter):
+    """The gateway accepts the end of an MCP session with 202, which the MCP
+    client reports as a failure: it isn't one."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage() != "Session termination failed: 202"
+
+
+logging.getLogger("mcp.client.streamable_http").addFilter(_SessionEndAccepted())
+
+URL = re.compile(r"https?://\S+")
+URL_TRAILER = ".,;:!?)]}>'\""
+CONSENT_NEEDED = re.compile(r'\s*Tool "([^"]+)" on "([^"]+)" requires the user\'s consent')
+CONSENT_STATUS = re.compile(r": (granted|denied|pending)\.\s*$")
+BLOCKED_BANNER = "╔"
+BLOCKED = "BLOCKED BY HUSH GATEWAY"
+POLICY_NOTICE = "Policy notice from"
+
+
+@dataclasses.dataclass
+class Outcome:
+    """What happened to one call.
+
+    kind is one of:
+      done           Expenses answered: `data`
+      connect        the user connects Expenses once, at `url`
+      consent        the call waits for the user's approval of `request_id`,
+                     at `url` when there is one
+      blocked        the gateway's policy blocks the call
+      not_assigned   Hush refused the exchange: the agent may not act for the user
+      not_available  Expenses isn't on the gateway for this user and agent
+      refused        Hush refused something else
+      error          anything else
+    """
+
+    kind: str
+    message: str = ""
+    data: Any = None
+    url: str | None = None
+    request_id: str | None = None
+
+
+class ExpensesThroughGateway:
+    def __init__(self, identity: Identity, app: str, http_client=create_mcp_http_client):
+        self.identity = identity
+        self.app = app
+        self.http_client = http_client
+
+    async def run(self, session: Session, tool: str, arguments: dict) -> Outcome:
+        try:
+            return await self._run(session, tool, arguments)
+        except HushRefused as e:
+            return Outcome("not_assigned" if e.not_assigned else "refused", e.description or e.error)
+        except Exception as e:
+            log.exception("%s through the gateway failed", tool)
+            return Outcome("error", f"{tool} through the gateway failed: {_cause(e)}")
+
+    async def _run(self, session: Session, tool: str, arguments: dict) -> Outcome:
+        async with self._gateway(await self.identity.exchange(session)) as gateway:
+            app = await self._app(gateway)
+            if app is None or not app.get("assigned"):
+                return Outcome("not_available", f"{self.app} isn't available on the gateway for you and this agent")
+            if app.get("connection") in ("disconnected", "invalid"):
+                return await self._connect(gateway)
+            if app.get("connection") == "unavailable":
+                return Outcome("error", app.get("reason") or f"the gateway can't reach {self.app}")
+            name = await self._tool_name(gateway, tool)
+            if name is None:
+                return Outcome("error", f"the gateway lists no {tool} tool on {self.app}")
+            result = await gateway.call_tool("hush_call_tool", {"name": name, "arguments": arguments})
+            return await self._outcome(gateway, result)
+
+    async def consent_status(self, session: Session, request_id: str) -> str:
+        """granted, denied, pending, or expired. After granted, run the call
+        again: the next exchange carries the approval."""
+        async with self._gateway(await self.identity.exchange(session)) as gateway:
+            text = _text(await gateway.call_tool(
+                "hush_user_consent_status", {"request_id": request_id, "wait": False}))
+        if match := CONSENT_STATUS.search(text):
+            return match.group(1)
+        return "expired"
+
+    @contextlib.asynccontextmanager
+    async def _gateway(self, token: str):
+        http = self.http_client(headers={"Authorization": f"Bearer {token}"})
+        async with http, streamable_http_client(self.identity.gateway_url, http_client=http) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                yield session
+
+    async def _app(self, gateway: ClientSession) -> dict | None:
+        # All of them: the gateway refuses to look up an app it doesn't serve.
+        result = await gateway.call_tool("hush_list_apps", {})
+        if result.is_error:
+            raise RuntimeError(_text(result))
+        listed = _json(result)
+        apps = listed.get("apps", []) if isinstance(listed, dict) else []
+        return next((a for a in apps if a.get("name") == self.app), None)
+
+    async def _tool_name(self, gateway: ClientSession, tool: str) -> str | None:
+        """The gateway's name for the tool, found the way any agent finds it."""
+        found = _json(await gateway.call_tool("hush_search_tools", {"app": self.app, "query": tool}))
+        if isinstance(found, dict):
+            found = found.get("tools")
+        if not isinstance(found, list):
+            return None
+        names = (t.get("name") for t in found if isinstance(t, dict))
+        return next((n for n in names if isinstance(n, str) and n.endswith(tool)), None)
+
+    async def _connect(self, gateway: ClientSession) -> Outcome:
+        text = _text(await gateway.call_tool("hush_connect", {"app": self.app}))
+        return Outcome("connect", f"Connect your {self.app} account once", url=_url(text))
+
+    async def _outcome(self, gateway: ClientSession, result) -> Outcome:
+        """The gateway's own replies open with what happened; anything else is
+        Expenses' answer, whatever its words."""
+        text = _text(result)
+        head = text.lstrip()
+        if head.startswith(BLOCKED_BANNER) and BLOCKED in "\n".join(head.splitlines()[:3]):
+            return Outcome("blocked", text.split(POLICY_NOTICE)[0].strip())
+        if consent := CONSENT_NEEDED.match(text):
+            return await self._request_consent(gateway, tool=consent.group(1), app=consent.group(2))
+        if text.startswith((f"{self.app} is not connected", f"{self.app} connection expired")):
+            return await self._connect(gateway)
+        if result.is_error:
+            return Outcome("error", text)
+        return Outcome("done", data=_json(result))
+
+    async def _request_consent(self, gateway: ClientSession, tool: str, app: str) -> Outcome:
+        text = _text(await gateway.call_tool("hush_request_user_consent", {"app": app, "tools": [tool]}))
+        request_id = re.search(r'request_id="([^"]+)"', text)
+        return Outcome("consent", f"{tool} waits for your approval", url=_url(text.split("Call the")[0]),
+                       request_id=request_id.group(1) if request_id else None)
+
+
+def _cause(error: BaseException) -> BaseException:
+    """The error itself, out of the groups the MCP client's tasks wrap it in."""
+    while isinstance(error, BaseExceptionGroup) and len(error.exceptions) == 1:
+        error = error.exceptions[0]
+    return error
+
+
+def _url(text: str) -> str | None:
+    """The first link in a reply, without punctuation the sentence put after it."""
+    match = URL.search(text)
+    return match.group(0).rstrip(URL_TRAILER) if match else None
+
+
+def _text(result) -> str:
+    return "\n".join(c.text for c in result.content if getattr(c, "type", "") == "text")
+
+
+def _json(result) -> Any:
+    """A tool's answer as data. A tool returning a list may answer with one
+    text item per element."""
+    if result.structured_content is not None:
+        return result.structured_content
+    items = [_parse(c.text) for c in result.content if getattr(c, "type", "") == "text"]
+    return items[0] if len(items) == 1 else items
+
+
+def _parse(text: str) -> Any:
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text

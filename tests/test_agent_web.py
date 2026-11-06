@@ -4,6 +4,7 @@ import httpx2
 import pytest
 
 from agent import web
+from agent.gateway import ExpensesThroughGateway, Outcome
 from tests.fake_hush import FakeHush
 from tests.test_agent_identity import identity_for
 
@@ -12,9 +13,14 @@ pytestmark = pytest.mark.anyio
 AGENT_URL = "http://localhost:8080"
 
 
+def app_for(hush: FakeHush, tmp_path, agent_url: str = AGENT_URL):
+    identity = identity_for(hush, tmp_path)
+    return web.build(identity, ExpensesThroughGateway(identity, "custom-expenses"), agent_url)
+
+
 async def signed_in_client(hush: FakeHush, tmp_path) -> httpx2.AsyncClient:
-    app = web.build(identity_for(hush, tmp_path), AGENT_URL)
-    client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://localhost:8080")
+    app = app_for(hush, tmp_path)
+    client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL)
     sign_in = await client.get("/signin")
     state = parse_qs(urlsplit(sign_in.headers["location"]).query)["state"][0]
     assert (await client.get("/callback", params={"state": state, "code": "code-1"})).status_code in (302, 307)
@@ -38,7 +44,7 @@ async def test_refused_when_not_assigned(tmp_path):
 
 
 async def test_a_sign_in_hush_refuses_keeps_no_session(tmp_path):
-    app = web.build(identity_for(FakeHush(registered=False), tmp_path), AGENT_URL)
+    app = app_for(FakeHush(registered=False), tmp_path)
     async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL) as client:
         resp = await client.get("/signin")
     assert resp.status_code == 401
@@ -47,8 +53,8 @@ async def test_a_sign_in_hush_refuses_keeps_no_session(tmp_path):
 
 
 async def test_a_refused_sign_in_is_reported(tmp_path):
-    app = web.build(identity_for(FakeHush(), tmp_path), AGENT_URL)
-    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://localhost") as client:
+    app = app_for(FakeHush(), tmp_path)
+    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL) as client:
         resp = await client.get("/callback", params={"error": "access_denied", "error_description": "nope"})
     assert resp.status_code == 403
     assert resp.json()["message"] == "nope"
@@ -56,14 +62,14 @@ async def test_a_refused_sign_in_is_reported(tmp_path):
 
 async def test_another_browser_is_not_signed_in(tmp_path):
     client = await signed_in_client(FakeHush(), tmp_path)
-    other = httpx2.AsyncClient(transport=client._transport, base_url="http://localhost:8080")
+    other = httpx2.AsyncClient(transport=client._transport, base_url=AGENT_URL)
 
     assert (await other.get("/api/me")).json() == {"signed_in": False}
     assert (await other.get("/api/exchange")).status_code == 401
 
 
 async def test_no_session_until_a_sign_in_starts(tmp_path):
-    app = web.build(identity_for(FakeHush(), tmp_path), AGENT_URL)
+    app = app_for(FakeHush(), tmp_path)
     async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL) as client:
         for path in ("/", "/healthz", "/api/me"):
             assert "set-cookie" not in (await client.get(path)).headers, path
@@ -71,7 +77,7 @@ async def test_no_session_until_a_sign_in_starts(tmp_path):
 
 
 async def test_the_cookie_is_secure_when_the_agent_is_on_https(tmp_path):
-    app = web.build(identity_for(FakeHush(), tmp_path), "https://agent.example.com")
+    app = app_for(FakeHush(), tmp_path, "https://agent.example.com")
     async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="https://agent.example.com") as client:
         assert "secure" in (await client.get("/signin")).headers["set-cookie"].lower()
 
@@ -85,8 +91,44 @@ async def test_an_exchange_that_fails_is_reported(tmp_path):
     assert resp.json()["ok"] is False
 
 
+async def test_a_consent_check_that_fails_is_reported(tmp_path):
+    client = await signed_in_client(FakeHush(), tmp_path)
+    (tmp_path / "token").unlink()
+
+    resp = await client.get("/api/consent/req-1")
+    assert resp.status_code == 502
+
+
+@pytest.mark.parametrize("body", ['{"amount": "lots"}', '{"amount": "inf"}', '{"amount": -3}', "[]", "not json"])
+async def test_bad_submit_input_is_a_400(tmp_path, body):
+    client = await signed_in_client(FakeHush(), tmp_path)
+    resp = await client.post("/api/expenses/submit", content=body)
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize("expense_id", ["1001.9", '"abc"', '"²"', "true", "null"])
+async def test_a_delete_needs_a_whole_number_id(tmp_path, expense_id):
+    client = await signed_in_client(FakeHush(), tmp_path)
+    resp = await client.post("/api/expenses/delete", content=f'{{"expense_id": {expense_id}}}')
+    assert resp.status_code == 400
+
+
+async def test_a_whole_number_id_is_accepted(tmp_path, monkeypatch):
+    sent = []
+
+    async def run(self, session, tool, arguments):
+        sent.append(arguments)
+        return Outcome("done")
+
+    monkeypatch.setattr(ExpensesThroughGateway, "run", run)
+    client = await signed_in_client(FakeHush(), tmp_path)
+    for expense_id in ("1001", '"1002"'):
+        assert (await client.post("/api/expenses/delete", content=f'{{"expense_id": {expense_id}}}')).status_code == 200
+    assert sent == [{"expense_id": 1001}, {"expense_id": 1002}]
+
+
 async def test_a_session_the_agent_no_longer_has_is_told_to_sign_in_again(tmp_path):
-    client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=web.build(identity_for(FakeHush(), tmp_path), AGENT_URL)),
+    client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app_for(FakeHush(), tmp_path)),
                                 base_url=AGENT_URL, cookies={web.SESSION_COOKIE: "from-before-a-restart"})
     assert "sign in again" in (await client.get("/api/exchange")).json()["message"]
 
@@ -99,5 +141,5 @@ async def test_a_session_the_agent_no_longer_has_is_told_to_sign_in_again(tmp_pa
     await client.post("/api/signout")
     assert (await client.get("/api/exchange")).json()["message"] == "sign in first"
 
-    fresh = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=web.build(identity_for(FakeHush(), tmp_path), AGENT_URL)), base_url=AGENT_URL)
+    fresh = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app_for(FakeHush(), tmp_path)), base_url=AGENT_URL)
     assert (await fresh.get("/api/exchange")).json()["message"] == "sign in first"
