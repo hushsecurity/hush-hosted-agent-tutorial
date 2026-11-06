@@ -1,3 +1,4 @@
+httpx2
 mcp>=2.3,<3
 starlette
 uvicorn
