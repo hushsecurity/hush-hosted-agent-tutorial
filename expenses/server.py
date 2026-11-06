@@ -7,23 +7,45 @@ submit (write) and delete (destructive).
 import dataclasses
 from typing import Annotated
 
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 from pydantic import Field
+from starlette.applications import Starlette
 
+from expenses import auth
 from expenses.store import Store
-
-GUEST = "guest"
 
 Amount = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 
 
 def current_account() -> str:
-    return GUEST
+    """The email of the account the caller's token was issued to."""
+    return get_access_token().subject
 
 
-def build(store: Store) -> MCPServer:
-    mcp = MCPServer("Expenses", instructions="Your expense reports: list, submit and delete expenses.")
+def build(store: Store, base_url: str, access_code: str | None = None, client_key: str | None = None) -> MCPServer:
+    """`base_url` is Expenses' public address: what the gateway, and your
+    browser to sign in, reach it at. With `access_code`, signing in asks for
+    it too. With `client_key`, clients stay registered across restarts."""
+    base_url = base_url.rstrip("/")
+    provider = auth.Provider(base_url, client_key)
+    mcp = MCPServer(
+        "Expenses",
+        instructions="Your expense reports: list, submit and delete expenses.",
+        auth_server_provider=provider,
+        auth=AuthSettings(
+            issuer_url=base_url,
+            resource_server_url=f"{base_url}/mcp",
+            client_registration_options=ClientRegistrationOptions(enabled=True),
+            revocation_options=RevocationOptions(enabled=True),
+            # Expenses' tokens are opaque and live only here, so a token it
+            # knows was issued for it.
+            validate_token_resource=False,
+        ),
+    )
+    mcp.custom_route(auth.SIGN_IN_PATH, methods=["GET", "POST"])(auth.sign_in_route(provider, access_code))
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     def list_expenses() -> list[dict]:
@@ -56,3 +78,12 @@ def build(store: Store) -> MCPServer:
         return result
 
     return mcp
+
+
+def app(store: Store, base_url: str, access_code: str | None = None, client_key: str | None = None) -> Starlette:
+    """Expenses as served: the MCP server and its sign-in."""
+    # host="0.0.0.0" also turns off the SDK's localhost-only Host check: in
+    # the cluster, the gateway reaches Expenses by its public name.
+    served = build(store, base_url, access_code, client_key).streamable_http_app(host="0.0.0.0")
+    served.add_middleware(auth.ClientIdFromBasicAuth)
+    return served
