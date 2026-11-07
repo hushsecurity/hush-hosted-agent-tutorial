@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir --no-compile --root-user-action=ignore --target /
 
 COPY agent /app/agent
 COPY expenses /app/expenses
+COPY setup /app/setup
 # Compiled now, as nothing may be written at run time. Writable by no one, even
 # on platforms that run pods in the root group.
 RUN python -m compileall -q /app && chmod -R go-w /app
@@ -21,6 +22,6 @@ ENV PYTHONPATH=/app/packages \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# One image, two programs: `agent` (the default) or `expenses`.
+# One image, three programs: `agent` (the default), `expenses` or `setup`.
 ENTRYPOINT ["/usr/bin/python3.11", "-m"]
 CMD ["agent"]

@@ -1,0 +1,106 @@
+{{- $name := include "tutorial.componentName" (list . "setup") }}
+{{- if not .Values.hush.apiKey.existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "tutorial.apiKeySecret" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "setup") | nindent 4 }}
+type: Opaque
+data:
+  id: {{ .Values.hush.apiKey.id | b64enc | quote }}
+  secret: {{ .Values.hush.apiKey.secret | b64enc | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "setup") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "tutorial.selectorLabels" (list . "setup") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tutorial.selectorLabels" (list . "setup") | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "tutorial.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: setup
+          image: {{ include "tutorial.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["setup"]
+          securityContext:
+            {{- include "tutorial.containerSecurityContext" . | nindent 12 }}
+          env:
+            {{- include "tutorial.setupEnv" . | nindent 12 }}
+            {{- include "tutorial.expensesAddressEnv" . | nindent 12 }}
+            - name: SETUP_PORT
+              value: {{ .Values.setup.port | quote }}
+          ports:
+            - name: status
+              containerPort: {{ .Values.setup.port }}
+          # Ready once Hush has Expenses: `helm install --wait` waits for it.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: status
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.setup.resources | nindent 12 }}
+---
+# On uninstall, before the API key goes: takes Expenses out of Hush.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}-remove
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "setup") | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-delete
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    metadata:
+      labels:
+        {{- include "tutorial.selectorLabels" (list . "setup") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "tutorial.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: remove
+          image: {{ include "tutorial.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["setup", "--remove"]
+          securityContext:
+            {{- include "tutorial.containerSecurityContext" . | nindent 12 }}
+          env:
+            {{- include "tutorial.setupEnv" . | nindent 12 }}
+            # For the command to finish uninstalling with, should this fail.
+            - name: HELM_RELEASE
+              value: {{ .Release.Name | quote }}
+            - name: HELM_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+          resources:
+            {{- toYaml .Values.setup.resources | nindent 12 }}

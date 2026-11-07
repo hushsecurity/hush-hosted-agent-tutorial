@@ -52,7 +52,7 @@ spec:
             - name: AGENT_TOKEN_FILE
               value: /var/run/secrets/hush/token
             - name: EXPENSES_APP
-              value: {{ .Values.agent.expensesApp | quote }}
+              value: {{ printf "custom-%s" .Values.expenses.name | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.agent.port }}

@@ -18,6 +18,21 @@ gateway:
   # and take authorization_servers[0].
   issuer: ""
 
+# A Hush API key, for the tutorial to put Expenses in Hush and take it out on
+# uninstall. Create one with the Applications Read (applications:read) and
+# Applications Write (applications:write) scopes only, expiring in a few hours:
+# long enough to uninstall with, as uninstalling uses it too. Required.
+hush:
+  apiKey:
+    # A Secret you created, with keys `id` and `secret`:
+    #   kubectl create secret generic hush-api-key --from-literal=id=... \
+    #     --from-literal=secret=...
+    # Preferred: the key stays out of your shell history and Helm's release.
+    existingSecret: ""
+    # Or the key itself.
+    id: ""
+    secret: ""
+
 agent:
   # Registered in Hush as this service account: the token's subject is
   # system:serviceaccount:<namespace>:<serviceAccount>.
@@ -26,13 +41,13 @@ agent:
   # kubectl port-forward; set it when serving the page from elsewhere.
   url: http://localhost:8080
   port: 8080
-  # The name Expenses has on the gateway.
-  expensesApp: custom-expenses
   resources:
     requests: {cpu: 10m, memory: 64Mi}
     limits: {memory: 256Mi}
 
 expenses:
+  # Its name in the Hush catalog; on the gateway it is custom-<name>.
+  name: expenses-tutorial
   # Expenses' public HTTPS address, for a load balancer or ingress you set up
   # in front of the expenses Service. The gateway and your browser both reach
   # Expenses there.
@@ -49,6 +64,14 @@ expenses:
     requests: {cpu: 10m, memory: 64Mi}
     limits: {memory: 256Mi}
 
+# Puts Expenses in Hush with the API key, the only part of the tutorial that
+# holds it.
+setup:
+  port: 8002
+  resources:
+    requests: {cpu: 10m, memory: 64Mi}
+    limits: {memory: 256Mi}
+
 tunnel:
   image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
   # Where Expenses reads the tunnel's address from.
@@ -58,8 +81,8 @@ tunnel:
     limits: {memory: 128Mi}
 
 # Let in only the traffic the tutorial needs: Expenses' log of calls from the
-# agent only, the tunnel's metrics from Expenses only. Takes effect where the
-# cluster's network enforces NetworkPolicy.
+# agent only, the tunnel's metrics from Expenses and setup only. Takes effect
+# where the cluster's network enforces NetworkPolicy.
 networkPolicy:
   enabled: true
 

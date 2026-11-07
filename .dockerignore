@@ -2,4 +2,5 @@
 !requirements.txt
 !agent/
 !expenses/
+!setup/
 **/__pycache__

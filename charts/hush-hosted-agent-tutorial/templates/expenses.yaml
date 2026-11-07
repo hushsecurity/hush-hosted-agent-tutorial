@@ -56,17 +56,13 @@ spec:
               value: {{ .Values.expenses.port | quote }}
             - name: EXPENSES_INTERNAL_PORT
               value: {{ .Values.expenses.internalPort | quote }}
+            {{- include "tutorial.expensesAddressEnv" . | nindent 12 }}
             {{- if $tunnel }}
-            - name: EXPENSES_TUNNEL
-              value: {{ printf "http://%s:%v" (include "tutorial.componentName" (list . "tunnel")) .Values.tunnel.metricsPort | quote }}
             - name: EXPENSES_ACCESS_CODE
               valueFrom:
                 secretKeyRef:
                   name: {{ include "tutorial.expensesSecret" . }}
                   key: code
-            {{- else }}
-            - name: EXPENSES_URL
-              value: {{ .Values.expenses.url | quote }}
             {{- end }}
             - name: EXPENSES_CLIENT_KEY
               valueFrom:

@@ -42,6 +42,39 @@ app.kubernetes.io/managed-by: {{ (index . 0).Release.Service }}
 {{- if not .Values.expenses.url }}true{{ end -}}
 {{- end -}}
 
+{{- define "tutorial.apiKeySecret" -}}
+{{- .Values.hush.apiKey.existingSecret | default (include "tutorial.componentName" (list . "setup")) -}}
+{{- end -}}
+
+{{- /* Where Expenses' public address comes from, for Expenses and setup. */ -}}
+{{- define "tutorial.expensesAddressEnv" -}}
+{{- if include "tutorial.tunnel" . -}}
+- name: EXPENSES_TUNNEL
+  value: {{ printf "http://%s:%v" (include "tutorial.componentName" (list . "tunnel")) .Values.tunnel.metricsPort | quote }}
+{{- else -}}
+- name: EXPENSES_URL
+  value: {{ .Values.expenses.url | quote }}
+{{- end -}}
+{{- end -}}
+
+{{- /* What setup needs to reach Hush; takes the root context. */ -}}
+{{- define "tutorial.setupEnv" -}}
+- name: HUSH_GATEWAY_ISSUER
+  value: {{ .Values.gateway.issuer | quote }}
+- name: EXPENSES_NAME
+  value: {{ .Values.expenses.name | quote }}
+- name: HUSH_API_KEY_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "tutorial.apiKeySecret" . }}
+      key: id
+- name: HUSH_API_KEY_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ include "tutorial.apiKeySecret" . }}
+      key: secret
+{{- end -}}
+
 {{- define "tutorial.expensesSecret" -}}
 {{- include "tutorial.componentName" (list . "expenses") -}}
 {{- end -}}
@@ -83,6 +116,15 @@ capabilities:
 {{- if not (index $.Values.gateway $value) -}}
 {{- fail (printf "Set %s. See values.yaml for where to find it." $name) -}}
 {{- end -}}
+{{- end -}}
+{{- if not (or .Values.hush.apiKey.existingSecret (and .Values.hush.apiKey.id .Values.hush.apiKey.secret)) -}}
+{{- fail "Set hush.apiKey.id and hush.apiKey.secret, or hush.apiKey.existingSecret: a Hush API key with the Applications Read and Applications Write scopes." -}}
+{{- end -}}
+{{- if and .Values.gateway.issuer (not (regexMatch "/v1/deployments/[^/]+/agents$" .Values.gateway.issuer)) -}}
+{{- fail (printf "gateway.issuer must be the gateway's issuer, ending /v1/deployments/<deployment>/agents (got %s)." .Values.gateway.issuer) -}}
+{{- end -}}
+{{- if not (regexMatch "^[a-z0-9][a-z0-9-]*$" .Values.expenses.name) -}}
+{{- fail (printf "expenses.name must be lowercase letters, digits and dashes (got %s)." .Values.expenses.name) -}}
 {{- end -}}
 {{- range $name, $url := dict "gateway.url" .Values.gateway.url "gateway.issuer" .Values.gateway.issuer "expenses.url" .Values.expenses.url -}}
 {{- if and $url (not (hasPrefix "https://" $url)) -}}

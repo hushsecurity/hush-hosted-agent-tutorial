@@ -3,7 +3,7 @@ RELEASE=$(shell git describe --always --dirty --abbrev=10)
 VENV=.venv
 CHART_DIR=charts/hush-hosted-agent-tutorial
 # Placeholders, only for rendering the chart here.
-CHART_SAMPLE=gateway.url=https://gateway.example.com/mcp,gateway.issuer=https://hush.example.com/issuer
+CHART_SAMPLE=gateway.url=https://gateway.example.com/mcp,gateway.issuer=https://hush.example.com/v1/deployments/dep-example/agents,hush.apiKey.id=key-id,hush.apiKey.secret=key-secret
 
 .PHONY: all
 all: test lint build
@@ -20,11 +20,13 @@ $(VENV)/.installed: requirements.txt requirements-dev.txt
 test: venv
 	@$(VENV)/bin/python -m pytest -q
 
-# Checks the chart, both with a quick tunnel and with Expenses' own address.
+# Checks the chart, both with a quick tunnel and with Expenses' own address,
+# and that it asks for an API key.
 .PHONY: lint
 lint:
 	@helm lint --quiet --strict $(CHART_DIR) --set $(CHART_SAMPLE)
 	@helm lint --quiet --strict $(CHART_DIR) --set $(CHART_SAMPLE),expenses.url=https://expenses.example.com
+	@helm template $(CHART_DIR) --set $(CHART_SAMPLE),hush.apiKey.secret= 2>&1 | grep -q "Set hush.apiKey"
 
 .PHONY: build
 build:

@@ -22,6 +22,19 @@ Signing in to Expenses asks for this access code:
 Expenses is at {{ .Values.expenses.url }}: serve the {{ include "tutorial.componentName" (list . "expenses") }} Service there.
 {{- end }}
 
-Uninstall:
+The tutorial puts Expenses in Hush as "Expenses (tutorial)": in the catalog
+as {{ .Values.expenses.name }}, and on your gateway for all users. Assign it to
+your agent in Hush (Applications, then its Assignments). Whether Hush has it:
+
+  kubectl logs -n {{ .Release.Namespace }} deploy/{{ include "tutorial.componentName" (list . "setup") }}
+
+Uninstall before the API key expires: it also takes Expenses out of Hush.
 
   helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+Then delete the agent in the Hush UI, and the API key unless it has expired.
+If uninstalling fails, for example because the key has expired, remove
+"Expenses (tutorial)" in the Hush UI, first from Applications, then from
+Catalog, and run:
+
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }} --no-hooks

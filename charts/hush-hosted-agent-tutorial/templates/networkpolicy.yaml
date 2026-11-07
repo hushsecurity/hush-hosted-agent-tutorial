@@ -36,6 +36,20 @@ spec:
   ingress:
     - ports:
         - port: http
+---
+# Nothing reaches setup: it only calls out.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "tutorial.componentName" (list . "setup") }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tutorial.labels" (list . "setup") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "tutorial.selectorLabels" (list . "setup") | nindent 6 }}
+  policyTypes: [Ingress]
 {{- if include "tutorial.tunnel" . }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -55,6 +69,9 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "tutorial.selectorLabels" (list . "expenses") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "tutorial.selectorLabels" (list . "setup") | nindent 14 }}
       ports:
         - port: metrics
 {{- end }}
