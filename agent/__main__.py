@@ -11,6 +11,7 @@ SETUP_INTERNAL     Setup's address, for the page to show whether Hush has Expens
 HELM_RELEASE       The tutorial's Helm release, for the page's clean-up command
 """
 
+import logging
 import os
 import pathlib
 import sys
@@ -39,7 +40,11 @@ def main() -> None:
     )
     expenses = ExpensesThroughGateway(identity, os.getenv("EXPENSES_APP", "custom-expenses"))
     expenses_side = ExpensesSide(http, os.getenv("EXPENSES_INTERNAL"), os.getenv("SETUP_INTERNAL"))
-    uvicorn.run(web.build(identity, expenses, agent_url, expenses_side, os.getenv("HELM_RELEASE")), host="0.0.0.0", port=PORT)
+    config = uvicorn.Config(web.build(identity, expenses, agent_url, expenses_side, os.getenv("HELM_RELEASE")),
+                            host="0.0.0.0", port=PORT)
+    # After the Config: it sets up uvicorn's loggers.
+    logging.getLogger("uvicorn.access").addFilter(web.WithoutQueries())
+    uvicorn.Server(config).run()
 
 
 if __name__ == "__main__":

@@ -38,6 +38,17 @@ class BadInput(Exception):
     pass
 
 
+class WithoutQueries(logging.Filter):
+    """Drops the query from uvicorn's access log lines: /callback's carries
+    the sign-in's authorization code."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            client, method, path, version, status = record.args
+            record.args = (client, method, str(path).split("?", 1)[0], version, status)
+        return True
+
+
 class Sessions(BaseHTTPMiddleware):
     """Finds the browser's session by its cookie. A browser without one gets a
     new session, kept (and the cookie set) only once it starts signing in."""

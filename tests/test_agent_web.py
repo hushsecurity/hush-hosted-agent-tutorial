@@ -1,7 +1,9 @@
+import logging
 from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 import pytest
+from uvicorn.logging import AccessFormatter
 
 from agent import web
 from agent.gateway import ExpensesThroughGateway, Outcome
@@ -184,3 +186,11 @@ async def test_a_list_answer_that_isnt_a_list_is_an_error(tmp_path, monkeypatch)
     listed = (await client.post("/api/expenses/list")).json()
     assert listed["kind"] == "error"
     assert "Expenses is down for maintenance" in listed["message"]
+
+
+def test_the_access_log_leaves_out_the_sign_in_code():
+    record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
+                               ("127.0.0.1:5000", "GET", "/callback?code=code-1&state=s", "1.1", 307), None)
+    assert web.WithoutQueries().filter(record)
+    line = AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s', use_colors=False).format(record)
+    assert line == '127.0.0.1:5000 - "GET /callback HTTP/1.1" 307 Temporary Redirect'
