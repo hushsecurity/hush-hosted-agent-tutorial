@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hosted Agent Tutorial</title>
 <style>
-  /* A step bar on top. "Try the assistant" puts the agent's own app beside the story, and what happened behind it below. */
+  /* A step bar on top. "Try the assistant" puts the agent's own app on the left, and on the right what to do, then what each of its calls set off. */
   :root {
     --bg: #ffffff; --surface: #f3f5f9; --surface-2: #e9edf4; --ink: #0d0d26; --text: #33334d; --muted: #5a5a72;
     --faint: #8a8aa0; --line: #e1e4ec; --accent: #4033d6; --accent-soft: #eceaff; --ok: #006b00; --ok-soft: #e2f7e2;
@@ -67,8 +67,16 @@
 
   main .wrap { padding-block: 32px 56px; }
   .layout { display: grid; grid-template-columns: minmax(0, 720px); gap: 40px; }
-  .layout.with-app { grid-template-columns: minmax(300px, 1fr) minmax(340px, 500px); }
-  @media (max-width: 980px) { .layout.with-app { grid-template-columns: minmax(0, 1fr); gap: 28px; } }
+  .layout.with-app { grid-template-columns: minmax(340px, 460px) minmax(0, 1fr); grid-template-areas: "head head" "app guide" "app behind";
+    grid-template-rows: auto auto 1fr; align-items: start; row-gap: 24px; }
+  .layout.with-app .story { display: contents; }
+  .layout.with-app .app-col { grid-area: app; }
+  .layout.with-app .feed-col { grid-area: behind; }
+  .try-head { grid-area: head; display: flex; flex-direction: column; gap: 14px; }
+  .try-guide { grid-area: guide; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  @media (max-width: 980px) {
+    .layout.with-app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "guide" "app" "behind"; grid-template-rows: none; gap: 24px; }
+  }
   .story { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
   .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
   .story h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.4px; }
@@ -124,21 +132,20 @@
   .nav-row { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 
   /* The story beside the assistant: where the reader is, and what's next. */
-  .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  .timeline > li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; padding-bottom: 18px; position: relative; }
-  .timeline > li:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 30px; bottom: 4px; width: 2px; background: var(--line); }
-  .timeline .mark { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--surface-2); color: var(--muted); }
-  .timeline .current .mark { background: var(--accent); color: var(--bg); }
-  .timeline .done .mark { background: var(--ok-soft); color: var(--ok); }
-  .timeline h3 { font-size: 16px; padding-top: 3px; }
-  .timeline .todo h3 { color: var(--muted); font-weight: 500; }
-  .timeline .body { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
-  .timeline .done .body { color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .progress { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; }
+  .progress li { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .progress .mark { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--surface-2); }
+  .progress .current { color: var(--ink); font-weight: 600; }
+  .progress .current .mark { background: var(--accent); color: var(--bg); }
+  .progress .done .mark { background: var(--ok-soft); color: var(--ok); }
+  .guide { display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); max-width: 920px; }
+  .guide .fields { max-width: 560px; }
   .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .checklist li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; font-size: 14px; }
   .checklist .tick { width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 11px; font-weight: 800; }
   .checklist .yes .tick { background: var(--ok); border-color: var(--ok); color: var(--bg); }
   .checklist .why { color: var(--muted); }
+  .checklist.inline { flex-direction: row; flex-wrap: wrap; gap: 8px 24px; }
 
   /* The assistant: the agent's own app, not part of the tutorial. */
   .app-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -208,30 +215,39 @@
   .add .abtn { justify-self: start; }
   .fine { font: 12px/1.4 var(--mono); color: var(--app-muted); overflow-wrap: anywhere; max-width: 40ch; }
 
-  /* Behind the assistant: the token it acts with, and the calls the Expenses service got. */
-  .behind { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 28px; margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--line); }
-  @media (max-width: 980px) { .behind { grid-template-columns: minmax(0, 1fr); } }
-  .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  /* Behind the scenes: Hush's side of the assistant, set apart in Hush's colour. */
+  .feed-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 18px 18px 20px; border-radius: 16px;
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg)); border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--bg)); }
   .panel-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .panel-head h2 { font-size: 17px; }
   .panel-head .sub { font-size: 13px; color: var(--muted); }
-  .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
-  table.log { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
-  .log th, .log td { padding: 9px 12px; text-align: left; vertical-align: top; }
-  .log thead th { font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--surface); border-bottom: 1px solid var(--line); }
-  .log tbody tr + tr td { border-top: 1px solid var(--line); }
-  .log .mono { font-family: var(--mono); font-size: 12px; color: var(--ink); }
-  .log .nowrap { white-space: nowrap; }
-  .log .when { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .log tr.new td { animation: flash 1.8s ease-out; }
-  @keyframes flash { from { background: color-mix(in srgb, var(--ok) 18%, transparent); } to { background: transparent; } }
-  @media (prefers-reduced-motion: reduce) { .log tr.new td { animation: none; } }
-  .empty { font-size: 13px; color: var(--muted); padding: 14px; }
-  .claims { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; }
-  .claims .k { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .howto { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 14px; margin-bottom: 12px; }
+  #feed > .aside { margin-top: 14px; }
+  .howto summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+  .howto[open] summary { margin-bottom: 8px; }
+  .howto > p + p, .howto > div + p { margin-top: 8px; }
+  .flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 10px 0; font-size: 12.5px; color: var(--muted); }
+  .tok { border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; background: var(--surface); color: var(--ink); }
+  .tok.out { border-color: var(--accent); background: var(--accent-soft); }
+  .claims { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 14px; margin-top: 6px; }
+  .claims .k { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 700; }
   .claims .v { font-family: var(--mono); font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
-  .claims .hl { color: var(--accent); font-weight: 700; }
-  .claims .cap { grid-column: 1 / -1; font-size: 12.5px; color: var(--muted); }
+  .claims .v span { font-family: var(--sans); color: var(--muted); }
+  .feed { list-style: none; margin: 0; padding: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .ev { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 2px 12px; padding: 10px 14px; font-size: 14px; }
+  .ev + .ev { border-top: 1px solid var(--line); }
+  .ev.new { animation: flash 1.8s ease-out; }
+  @keyframes flash { from { background: color-mix(in srgb, var(--accent) 12%, transparent); } to { background: transparent; } }
+  @media (prefers-reduced-motion: reduce) { .ev.new { animation: none; } }
+  .ev .when { grid-row: span 2; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; padding-top: 2px; }
+  .ev .what { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; }
+  .ev .what b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+  .ev .then { font-size: 13px; color: var(--muted); }
+  .badge { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.wait { background: var(--note-soft); color: var(--note); }
+  .badge.no { background: var(--deny-soft); color: var(--deny); }
+  .empty { font-size: 13px; color: var(--muted); padding: 12px 14px; background: var(--bg); border: 1px dashed var(--line); border-radius: 12px; }
 </style>
 </head>
 <body>
@@ -254,17 +270,11 @@
         <div class="app-label">The agent's app <span>what your users see</span></div>
         <div class="appwin" id="app"></div>
       </section>
+      <section class="feed-col" id="behind" aria-label="Behind the scenes" hidden>
+        <div class="panel-head"><h2>Behind the scenes</h2><span class="sub">what Hush did with each of the assistant's calls</span></div>
+        <div id="feed"></div>
+      </section>
     </div>
-    <section class="behind" id="behind" aria-label="Behind the assistant" hidden>
-      <div class="panel">
-        <div class="panel-head"><h2>The agent's Hush access token</h2><span class="sub">what the agent calls the gateway with</span></div>
-        <div id="claims"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h2>What the Expenses service saw</h2><span class="sub" id="log-sub"></span></div>
-        <div class="table-scroll" id="log"></div>
-      </div>
-    </section>
   </div>
 </main>
 
@@ -278,7 +288,7 @@
   ];
   const STEP_KEY = "hush-hosted-agent-tutorial-step";
   const DONE_KEY = "hush-hosted-agent-tutorial-done";
-  const LOG_POLL_MS = 3000;
+  const FEED_POLL_MS = 3000;
   const SETUP_POLL_MS = 5000;
   const CONSENT_POLL_MS = 3000;
   const CONNECT_POLL_MS = 4000;
@@ -297,10 +307,13 @@
   const done = new Set(load(DONE_KEY, []).filter((key) => !LIVE_STEPS.includes(key)));
   // Checks the reader ran: {pending} while asking, {checked} after.
   const checks = {};
-  let token = null;
-  let tokenError = null;
-  let calls = null;
-  let seenCalls = null;
+  // Behind the scenes: the agent's calls for the user, and the user's
+  // approval decisions. Expenses keep their description after they're gone.
+  let activity = null;
+  const described = new Map();
+  let seenEvents = null;
+  const HOWTO_KEY = "hush-hosted-agent-tutorial-howto";
+  let howtoOpen = load(HOWTO_KEY, false);
 
   // The assistant, as its user sees it.
   const app = {
@@ -315,12 +328,8 @@
     signinError: null,    // why the last sign-in, or the session, ended
     signinRefused: false, // Hush refused the sign-in, rather than the session ending
   };
-  // What the assistant last did, for the story beside it.
-  let lastEvent = null;
-  // Hush asked the user about the expense being added, and whether it asked
-  // at all since signing in: an approval holds for later adds too.
+  // Hush asked the user about the expense being added.
   let consentAsked = false;
-  let consentEverAsked = false;
   let consentTimer = null;
   let connectTimer = null;
 
@@ -573,41 +582,35 @@
   function storyTry() {
     const part = tryPart();
     const problem = tryProblem();
-    const order = ["signin", "connect", "use"];
-    const state = (key) => order.indexOf(key) < order.indexOf(part) ? "done"
-      : key === part && !problem ? "current" : "todo";
-    const item = (key, n, title, current, finished = "") => {
-      const s = state(key);
-      return `<li class="${s}"><span class="mark">${s === "done" ? "✓" : n}</span><div><h3>${title}</h3>
-        ${s === "current" ? `<div class="body">${current}</div>` : s === "done" && finished ? `<div class="body"><p>${finished}</p></div>` : ""}</div></li>`;
-    };
+    const steps = [["signin", "Sign in"], ["connect", "Connect the Expenses service"], ["use", "Work on your expenses"]];
+    const at = steps.findIndex(([key]) => key === part);
+    const guide = { signin: trySignIn, connect: tryConnect, use: tryUse }[part]();
     return `
-      <h1>Try the assistant</h1>
-      <p>The assistant is the agent's own app, as your users see it. Use it as one of them, while these notes tell you
-        what happens behind it.</p>
-      ${problem}
-      <ol class="timeline">
-        ${item("signin", 1, "Sign in", trySignIn(), trySignedIn())}
-        ${item("connect", 2, "Connect the Expenses service", tryConnect(), "The gateway keeps your connection to the Expenses service, and calls it with that connection for you.")}
-        ${item("use", 3, "Work on your expenses", tryUse())}
-      </ol>
-      <div class="nav-row">
-        ${goTo("access", "Back")}
-        <button class="btn${done.has("try") ? " primary" : ""}" type="button" data-step="${stepOf("recap")}">Next: Recap</button>
+      <div class="try-head">${eyebrow()}
+        <h1>Try the assistant</h1>
+        <p>The assistant is the agent's own app, as your users see it. Use it as one of them: <b>Behind the scenes</b>
+          shows what each of its calls set off.</p>
+        <ol class="progress">${steps.map(([key, title], i) => {
+          const s = i < at ? "done" : i === at && !problem ? "current" : "todo";
+          return `<li class="${s}"><span class="mark">${s === "done" ? "✓" : i + 1}</span>${title}</li>`;
+        }).join("")}</ol>
+      </div>
+      <div class="try-guide">
+        ${problem || `<div class="guide">${guide}</div>`}
+        <div class="nav-row">
+          ${goTo("access", "Back")}
+          <button class="btn${done.has("try") ? " primary" : ""}" type="button" data-step="${stepOf("recap")}">Next: Recap</button>
+        </div>
       </div>`;
   }
 
   function trySignIn() {
     return `<p>Click <b>Sign in</b> in the assistant. It sends you to Hush, where you sign in with your usual
-      company account. Hush then gives the agent a Hush access token for you that only this agent can use.</p>
+      company account. Hush then gives the agent a Hush access token for you that only this agent can use.
+      <b>Behind the scenes</b> shows how the agent uses it on each call.</p>
       ${app.signinError ? `<div class="result no" role="status"><span>${app.signinRefused
         ? "Hush refused the last sign-in." : "The agent no longer has your sign-in."}</span>
         <span class="detail">${esc(app.signinError)}</span></div>` : ""}`;
-  }
-
-  function trySignedIn() {
-    return `Signed in as <b>${esc(me.email)}</b>. To act for you, the agent trades your Hush access token and its own
-      platform token for a Hush access token that names you both (an RFC 8693 token exchange): see it below.`;
   }
 
   function tryConnect() {
@@ -623,40 +626,22 @@
         others from signing in to it.</p>` : ""}`;
   }
 
-  const EVENTS = {
-    listed: ["ok", `The assistant asked the Expenses service for your expenses, through the gateway. <code>list_expenses</code> only
-      reads, so the gateway let it through, and the Expenses service answered from your own account: see its call below.`],
-    consent: ["wait", `The gateway is holding the call: <code>submit_expense</code> writes, so it asks you first.
-      Click <b>Review the request</b> in the assistant and approve it. The assistant then adds it again, and this time
-      the token exchange carries your approval. The Expenses service hasn't seen the call yet.`],
-    added: ["ok", `You approved, and the Expenses service added the expense to your account: see its call below.`],
-    added_again: ["ok", `The Expenses service added the expense without asking you again: Hush remembers the approval you gave
-      earlier. See its call below.`],
-    added_directly: ["wait", `The Expenses service added the expense without asking you first: is <code>submit_expense</code> set
-      to ask the user in Hush?`],
-    declined: ["no", `You declined: the call never reached the Expenses service.`],
-    blocked: ["ok", `<b>As expected.</b> The gateway blocked the delete: <code>delete_expense</code> deletes, so Hush's policy blocks it.
-      The Expenses service never got the call: nothing new below.`],
-    deleted: ["wait", `The Expenses service deleted it: is <code>delete_expense</code> still blocked in Hush?`],
-  };
-
   function tryUse() {
     const tasks = [
       ["try-list", "See your expenses", "a read: allowed by default"],
       ["try-submit", "Add an expense", "a write: asks you first, by default"],
       ["try-delete", "Delete an expense", "a delete: blocked by default"],
     ];
-    const event = EVENTS[lastEvent];
     const all = tasks.every(([key]) => done.has(key));
     return `
-      <p>The assistant calls the Expenses service through the Hush Identity Gateway, with the Hush access token naming you both.
-        The gateway checks each call against the tools' policies. Try each:</p>
-      <ul class="checklist">${tasks.map(([key, title, why]) =>
+      <p>The assistant calls the Expenses service through the Hush Identity Gateway, which checks each call against the
+        tools' policies. Try each:</p>
+      <ul class="checklist inline">${tasks.map(([key, title, why]) =>
         `<li class="${done.has(key) ? "yes" : ""}"><span class="tick">${done.has(key) ? "✓" : ""}</span>
           <span>${title} <span class="why">· ${why}</span></span></li>`).join("")}</ul>
-      ${event ? `<div class="result ${event[0]}"><span>${event[1]}</span></div>` : ""}
-      <p class="aside">Hush records every call too: in the Hush UI, open <b>Applications</b>, then
-        <b>${esc(appName())}</b>, and its <b>Activity</b> tab.</p>
+      ${consentAsked ? `<div class="result wait"><span>The gateway is holding the call: <code>submit_expense</code> writes, so
+        it asks you first. Click <b>Review the request</b> in the assistant and approve it. The assistant then adds it
+        again, and this time the token exchange carries your approval.</span></div>` : ""}
       ${all ? `<div class="result ok"><span>That's the whole flow. Next, a recap.</span></div>` : ""}`;
   }
 
@@ -666,7 +651,7 @@
       <h1>Recap</h1>
       <ul class="points">
         <li>The agent holds no secret: its platform token is all it has.</li>
-        <li>One token exchange gives a Hush access token naming both you and the agent.</li>
+        <li>Each call begins with a token exchange, which gives a Hush access token naming both you and the agent.</li>
         <li>The agent reaches an app only when the app is assigned to it, and open to the user it acts for.</li>
         <li>Every call is checked against the tools' policies. By default, a read goes through, a write waits for you,
           and a delete is blocked.</li>
@@ -679,6 +664,7 @@
       <div class="nav-row">${goTo("try", "Back")}</div>`;
   }
 
+  const eyebrow = () => `<span class="eyebrow">Step ${step + 1} of ${STEPS.length}</span>`;
   const STORIES = { welcome: storyWelcome, agent: storyAgent, access: storyAccess, try: storyTry, recap: storyRecap };
 
   // ---- The assistant -------------------------------------------------------------
@@ -792,17 +778,16 @@
     if (!me.signed_in) return;
     app.busy = null;
     if (r.kind === "done") {
-      const first = app.phase !== "ready";
       app.phase = "ready";
       app.expenses = r.data;
+      for (const x of Array.isArray(r.data) ? r.data : []) described.set(String(x.id), x.description);
       stopConnecting();
-      if (!done.has("try-list") || first && !lastEvent) lastEvent = "listed";
       markDone("try-list");
     } else if (!(quiet && r.kind === "connect")) {
       setPhaseFrom(r);
     }
     render();
-    refreshCalls();
+    refreshFeed();
   }
 
   function startConnecting() {
@@ -825,20 +810,17 @@
   // The agent no longer has the user's sign-in: back to signing in.
   function signedOut(message = null) {
     me = { signed_in: false };
-    token = null;
-    tokenError = null;
+    activity = null;
     clearTimeout(consentTimer);
     stopConnecting();
     Object.assign(app, { phase: "signed_out", expenses: [], notice: null, busy: null, menuOpen: false,
       signinError: message, signinRefused: false });
-    lastEvent = null;
     consentAsked = false;
-    consentEverAsked = false;
     forgetTries();
-    renderLog();
+    renderFeed();
   }
 
-  async function appSubmit(draft, approved = false) {
+  async function appSubmit(draft) {
     app.busy = "submit";
     app.notice = null;
     render();
@@ -848,7 +830,6 @@
     const what = `“${esc(draft.description)}” (${esc(money(draft.amount))})`;
     if (r.kind === "done") {
       app.notice = { tone: "ok", html: `Added ${what}.` };
-      lastEvent = approved || consentAsked ? "added" : consentEverAsked ? "added_again" : "added_directly";
       consentAsked = false;
       markDone("try-submit");
       return appList({ quiet: true });
@@ -857,9 +838,7 @@
       app.notice = { tone: "wait", waiting: Boolean(r.request_id), html: `I need your OK before I add ${what}.
         ${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener">Review the request</a>` : "Approve it where Hush asks you."}
         ${r.request_id ? "" : " Then add it again."}` };
-      lastEvent = "consent";
       consentAsked = true;
-      consentEverAsked = true;
       if (r.request_id) waitForConsent(r.request_id, draft);
     } else if (r.kind === "blocked") {
       app.notice = { tone: "no", html: "I'm not allowed to add expenses: your company's policy blocks it." };
@@ -869,7 +848,7 @@
       setPhaseFrom(r);
     }
     render();
-    refreshCalls();
+    refreshFeed();
   }
 
   // Asks Hush, through the agent, until the request is decided; then adds it
@@ -880,14 +859,13 @@
       const r = await api(`/api/consent/${encodeURIComponent(requestId)}`);
       if (!me.signed_in) return;
       if (r.status === "pending") return waitForConsent(requestId, draft);
-      if (r.status === "granted") return appSubmit(draft, true);
+      if (r.status === "granted") return appSubmit(draft);
       if (r.error === "login_required") { signedOut(r.message); render(); return; }
       app.notice = r.status === "denied"
         ? { tone: "no", html: "You declined, so I didn't add it." }
         : r.status === "expired"
           ? { tone: "no", html: "The approval request expired. Add it again to ask again." }
           : { tone: "no", html: `I couldn't tell whether you approved: ${esc(r.message)}` };
-      if (r.status === "denied") lastEvent = "declined";
       consentAsked = false;
       render();
     }, CONSENT_POLL_MS);
@@ -904,11 +882,9 @@
     app.busy = null;
     if (r.kind === "blocked") {
       app.notice = { tone: "no", html: `I'm not allowed to delete ${what}: your company's policy blocks deleting expenses.` };
-      lastEvent = "blocked";
       markDone("try-delete");
     } else if (r.kind === "done") {
       app.notice = { tone: "ok", html: `Deleted ${what}.` };
-      lastEvent = "deleted";
       return appList({ quiet: true });
     } else if (r.kind === "consent") {
       app.notice = { tone: "wait", html: `I need your OK before I delete ${what}.
@@ -919,64 +895,104 @@
       setPhaseFrom(r);
     }
     render();
-    refreshCalls();
+    refreshFeed();
   }
 
-  // ---- Behind the assistant ------------------------------------------------------
+  // ---- Behind the scenes --------------------------------------------------------
 
-  async function loadToken() {
-    if (!me.signed_in || token) return;
-    const r = await api("/api/exchange");
+  async function refreshFeed() {
+    if (!me.signed_in) { activity = null; renderFeed(); return; }
+    const a = await api("/api/activity");
     if (!me.signed_in) return;
-    if (r.claims) {
-      token = r.claims;
-      tokenError = null;
-    } else if (r.error === "login_required") {
-      signedOut(r.message);
-      return render();
-    } else {
-      tokenError = { refused: r.status >= 400 && r.status < 500, message: r.message || "no answer" };
+    if (Array.isArray(a.events)) activity = a.events;
+    renderFeed();
+  }
+
+  const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  // What the assistant did, in the user's words.
+  function action(ev) {
+    const a = ev.arguments || {};
+    if (ev.tool === "list_expenses") return "List your expenses";
+    if (ev.tool === "submit_expense") return `Add “${esc(a.description)}”, ${esc(money(a.amount))}`;
+    if (ev.tool === "delete_expense") {
+      const description = described.get(String(a.expense_id));
+      return description ? `Delete “${esc(description)}”` : `Delete expense ${esc(a.expense_id)}`;
     }
-    renderToken();
+    return esc(ev.tool);
   }
 
-  async function refreshCalls() {
-    if (!me.signed_in) { calls = null; renderLog(); return; }
-    const r = await api("/api/calls");
-    if (Array.isArray(r.calls)) calls = r.calls;
-    renderLog();
+  // What Hush decided, in a few words, and a note only when something is off.
+  function decision(ev) {
+    if (ev.kind === "decision") {
+      if (ev.decision === "granted") return ["ok", "You approved", "The assistant adds it again: this time the token exchange carries your approval."];
+      if (ev.decision === "denied") return ["no", "You declined", "So the assistant doesn't add it."];
+      return ["wait", "The request expired", "Add it again to ask again."];
+    }
+    switch (ev.outcome) {
+      case "done":
+        if (ev.approval === "just") return ["ok", "Allowed, after your approval"];
+        if (ev.approval === "earlier") return ["ok", "Allowed: you approved earlier"];
+        if (ev.tool === "delete_expense") return ["wait", "Allowed", "Is <code>delete_expense</code> still blocked in Hush?"];
+        if (ev.tool === "submit_expense") return ["wait", "Allowed without asking", "Is <code>submit_expense</code> set to ask the user in Hush?"];
+        return ["ok", "Allowed"];
+      case "consent": return ["wait", "Waiting for your approval"];
+      case "blocked": return ["ok", "Blocked by policy, as expected"];
+      case "connect": return ["wait", "Connect the Expenses service first"];
+      case "not_available": return ["no", "Not offered to the agent", "Is Expenses (tutorial) assigned to the agent?"];
+      case "not_assigned": return ["no", "Refused", `Hush refused the token exchange: ${esc(ev.exchange?.error || ev.message)}`];
+      case "signed_out": return ["no", "Signed out", esc(ev.message)];
+      case "refused": return ["no", "Refused", `Hush answered: ${esc(ev.message)}`];
+      default: return ["no", "Failed", esc(ev.exchange?.error ? `The token exchange failed: ${ev.exchange.error}` : ev.message)];
+    }
   }
 
-  function renderLog() {
-    document.getElementById("log-sub").textContent = me.signed_in ? `calls on ${me.email}'s account, newest first` : "";
-    const log = document.getElementById("log");
-    if (!me.signed_in) { log.innerHTML = `<p class="empty">Sign in to the assistant to see the calls the Expenses service gets for you.</p>`; return; }
-    if (!calls || !calls.length) { log.innerHTML = `<p class="empty">No calls for ${esc(me.email)} yet.</p>`; return; }
-    const key = (c) => `${c.time}|${c.tool}|${c.result}`;
-    const fresh = seenCalls ? (c) => !seenCalls.has(key(c)) : () => false;
-    log.innerHTML = `<table class="log"><thead><tr><th>When</th><th>Account</th><th>Tool</th><th>Arguments</th><th>Result</th></tr></thead>
-      <tbody>${calls.map((c) => `<tr${fresh(c) ? ` class="new"` : ""}><td class="when">${esc(new Date(c.time).toLocaleTimeString())}</td>
-        <td class="mono nowrap">${esc(c.account)}</td><td class="mono nowrap">${esc(c.tool)}</td>
-        <td class="mono">${esc(Object.entries(c.arguments || {}).map(([k, v]) => `${k}: ${v}`).join(", "))}</td>
-        <td>${esc(c.result)}</td></tr>`).join("")}</tbody></table>`;
-    seenCalls = new Set(calls.map(key));
+  // Whether the call reached the Expenses service, and on which of its
+  // accounts: the one the user connected, which needn't be their Hush email.
+  function reached(ev) {
+    if (ev.kind === "decision") return "";
+    if (ev.outcome === "consent") return "This hasn't reached the Expenses service.";
+    if (ev.outcome !== "done") return "This never reached the Expenses service.";
+    const account = ev.seen?.account;
+    if (!account) return "This reached the Expenses service.";
+    const other = me.email && account.toLowerCase() !== me.email.toLowerCase();
+    return `This reached the Expenses service as <b>${esc(account)}</b>${other
+      ? ": the account you connected, not your Hush email" : ""}.`;
   }
 
-  function renderToken() {
-    const box = document.getElementById("claims");
-    if (!token) {
-      box.innerHTML = `<p class="empty">${!me.signed_in ? "Appears once you sign in to the assistant."
-        : tokenError ? (tokenError.refused ? `Hush refused the token exchange: ${esc(tokenError.message)}`
-          : `The token exchange failed: ${esc(tokenError.message.replace(/^the exchange failed: /, ""))}`)
-        : "The agent hasn't got one for you yet."}</p>`;
+  // Told once: how every call reaches the Expenses service.
+  function howto() {
+    const c = (activity || []).find((ev) => ev.exchange?.claims)?.exchange.claims;
+    const act = c && (typeof c.act === "object" ? c.act.sub : c.act);
+    return `<details class="howto" id="howto"${howtoOpen ? " open" : ""}><summary>How each call reaches the Expenses service</summary>
+      <p>Before every call, the agent trades two tokens at Hush for one that names you both (an RFC 8693 token exchange):</p>
+      <div class="flow"><span class="tok">the agent's platform token</span>+<span class="tok">your Hush access token</span>
+        →<b>Hush</b>→<span class="tok out">a Hush access token for you and the agent</span></div>
+      ${c ? `<div class="claims"><span class="k">sub</span><span class="v">${esc(c.sub)} <span>you, as Hush knows you</span></span>
+        ${c.email ? `<span class="k">email</span><span class="v">${esc(c.email)} <span>your email</span></span>` : ""}
+        <span class="k">act</span><span class="v">${esc(agentName() || act)} <span>the agent, acting for you</span></span></div>` : ""}
+      <p>The gateway checks that token and the tool's policy, then calls the Expenses service with your own connection to it.</p>
+    </details>`;
+  }
+
+  function renderFeed() {
+    const box = document.getElementById("feed");
+    if (!me.signed_in) {
+      setHtml(box, `${howto()}<p class="empty">Sign in to the assistant: each call it makes for you shows up here.</p>`);
       return;
     }
-    const shown = ["sub", "email", "act", "aud"].filter((k) => k in token);
-    const value = (k) => typeof token[k] === "object" ? JSON.stringify(token[k]) : token[k];
-    box.innerHTML = `<div class="claims">${shown.map((k) =>
-      `<span class="k${k === "act" ? " hl" : ""}">${esc(k)}</span><span class="v${k === "act" ? " hl" : ""}">${esc(value(k))}</span>`).join("")}
-      <span class="cap">You are <code>sub</code>; <code>act</code> is the agent acting for you. Hush issued it in the
-        token exchange.</span></div>`;
+    const fresh = (ev) => seenEvents && !seenEvents.has(`${ev.id}:${ev.repeats}`);
+    const rows = (activity || []).map((ev) => {
+      const [tone, said, note] = decision(ev);
+      const then = [note && `${note}${/[.?!]$/.test(note) ? "" : "."}`, reached(ev)].filter(Boolean).join(" ");
+      return `<li class="ev${fresh(ev) ? " new" : ""}"><span class="when">${esc(clock(ev.time))}</span>
+        <span class="what"><b>${action(ev)}</b><span class="badge ${tone}">${said}${ev.repeats > 1 ? ` ×${ev.repeats}` : ""}</span></span>
+        <span class="then">${then}</span></li>`;
+    }).join("");
+    setHtml(box, `${howto()}${rows ? `<ol class="feed">${rows}</ol>` : `<p class="empty">Nothing yet: the assistant's first call for you shows up here.</p>`}
+      <p class="aside">Hush records every call too: in the Hush UI, open <b>Applications</b>, then
+        <b>${esc(appName())}</b>, and its <b>Activity</b> tab.</p>`);
+    seenEvents = new Set((activity || []).map((ev) => `${ev.id}:${ev.repeats}`));
   }
 
   // ---- Page ----------------------------------------------------------------------
@@ -993,10 +1009,10 @@
     document.getElementById("layout").classList.toggle("with-app", trying);
     document.getElementById("app-col").hidden = !trying;
     document.getElementById("behind").hidden = !trying;
-    setHtml(document.getElementById("story"), `<span class="eyebrow">Step ${step + 1} of ${STEPS.length}</span>${STORIES[key]()}`);
+    setHtml(document.getElementById("story"), trying ? storyTry() : `${eyebrow()}${STORIES[key]()}`);
     if (trying) {
       renderApp();
-      renderToken();
+      renderFeed();
     }
   }
 
@@ -1008,8 +1024,7 @@
     window.scrollTo({ top: 0 });
     if (STEPS[step].key === "try") {
       if (me.signed_in && app.phase === "loading" && app.busy !== "list") appList();
-      loadToken();
-      refreshCalls();
+      refreshFeed();
     }
   }
 
@@ -1052,6 +1067,7 @@
 
   document.addEventListener("toggle", (event) => {
     if (event.target.id === "app-menu") app.menuOpen = event.target.open;
+    if (event.target.id === "howto") { howtoOpen = event.target.open; save(HOWTO_KEY, howtoOpen); }
   }, true);
 
   // Back from connecting the Expenses service in the other tab: look at once.
@@ -1064,7 +1080,6 @@
 
   async function start() {
     render();
-    renderLog();
     // Back from a sign-in Hush refused.
     const params = new URLSearchParams(location.search);
     if (params.has("signin_error")) {
@@ -1079,12 +1094,9 @@
       forgetTries();
     }
     render();
-    if (me.signed_in && STEPS[step].key === "try") {
-      appList();
-      loadToken();
-    }
-    refreshCalls();
-    setInterval(() => { if (!document.hidden && STEPS[step].key === "try") refreshCalls(); }, LOG_POLL_MS);
+    if (me.signed_in && STEPS[step].key === "try") appList();
+    refreshFeed();
+    setInterval(() => { if (!document.hidden && STEPS[step].key === "try") refreshFeed(); }, FEED_POLL_MS);
     // Hush gets the Expenses service in the background: show it once it does.
     setInterval(async () => {
       if (document.hidden || !["welcome", "access"].includes(STEPS[step].key) || inHush().state === "ready") return;

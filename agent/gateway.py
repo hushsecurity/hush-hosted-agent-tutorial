@@ -12,15 +12,18 @@ LLM; this scripted agent reads the few answers it needs to tell apart.
 
 import contextlib
 import dataclasses
+import datetime
+import itertools
 import json
 import logging
 import re
+import time
 from typing import Any
 
 from mcp import ClientSession
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
-from agent.identity import HushRefused, Identity, Session
+from agent.identity import Activity, HushRefused, Identity, Session, claims
 
 log = logging.getLogger("agent")
 
@@ -36,6 +39,9 @@ class _SessionEndAccepted(logging.Filter):
 logging.getLogger("mcp.client.streamable_http").addFilter(_SessionEndAccepted())
 
 URL = re.compile(r"https?://\S+")
+# What the page shows of the token each exchange gave: never the token itself.
+EXCHANGE_CLAIMS = ("sub", "email", "act", "aud", "exp")
+_event_ids = itertools.count(1)
 URL_TRAILER = ".,;:!?)]}>'\""
 CONSENT_NEEDED = re.compile(r'\s*Tool "([^"]+)" on "([^"]+)" requires the user\'s consent')
 CONSENT_STATUS = re.compile(r": (granted|denied|pending)\.\s*$")
@@ -75,18 +81,38 @@ class ExpensesThroughGateway:
         self.http_client = http_client
 
     async def run(self, session: Session, tool: str, arguments: dict) -> Outcome:
+        activity = session.activity
+        started = time.time()
+        exchanged: dict = {}
+        outcome = await self._attempt(session, tool, arguments, exchanged)
+        exchanged.pop("asked", None)
+        _record_call(activity, tool, arguments, started, exchanged, outcome)
+        return outcome
+
+    async def _attempt(self, session: Session, tool: str, arguments: dict, exchanged: dict) -> Outcome:
         try:
-            return await self._run(session, tool, arguments)
+            return await self._run(session, tool, arguments, exchanged)
         except HushRefused as e:
+            if e.step == "exchange":
+                exchanged["error"] = e.description or e.error
             if e.error == "login_required":
                 return Outcome("signed_out", e.description or e.error)
+            if e.status >= 500:
+                return Outcome("error", f"Hush failed: {e.description or e.error}")
             return Outcome("not_assigned" if e.not_assigned else "refused", e.description or e.error)
         except Exception as e:
             log.exception("%s through the gateway failed", tool)
+            if exchanged.get("asked") and "claims" not in exchanged:
+                exchanged["error"] = str(_cause(e))
             return Outcome("error", f"{tool} through the gateway failed: {_cause(e)}")
 
-    async def _run(self, session: Session, tool: str, arguments: dict) -> Outcome:
-        async with self._gateway(await self.identity.exchange(session)) as gateway:
+    async def _run(self, session: Session, tool: str, arguments: dict, exchanged: dict) -> Outcome:
+        # The user's sign-in first, refreshed if need be: its failures aren't the exchange's.
+        await self.identity.user_token(session)
+        exchanged["asked"] = True
+        token = await self.identity.exchange(session)
+        exchanged["claims"] = {k: v for k, v in claims(token).items() if k in EXCHANGE_CLAIMS}
+        async with self._gateway(token) as gateway:
             app = await self._app(gateway)
             if app is None or not app.get("assigned"):
                 return Outcome("not_available", f"{self.app} isn't available on the gateway for you and this agent")
@@ -103,12 +129,14 @@ class ExpensesThroughGateway:
     async def consent_status(self, session: Session, request_id: str) -> str:
         """granted, denied, pending, or expired. After granted, run the call
         again: the next exchange carries the approval."""
+        activity = session.activity
         async with self._gateway(await self.identity.exchange(session)) as gateway:
             text = _text(await gateway.call_tool(
                 "hush_user_consent_status", {"request_id": request_id, "wait": False}))
-        if match := CONSENT_STATUS.search(text):
-            return match.group(1)
-        return "expired"
+        status = match.group(1) if (match := CONSENT_STATUS.search(text)) else "expired"
+        if status != "pending" and request_id in activity.awaiting:
+            _record_decision(activity, request_id, status)
+        return status
 
     @contextlib.asynccontextmanager
     async def _gateway(self, token: str):
@@ -198,3 +226,55 @@ def _parse(text: str) -> Any:
         return json.loads(text)
     except ValueError:
         return text
+
+
+def _record_call(activity: Activity, tool: str, arguments: dict, started: float, exchanged: dict,
+                 outcome: Outcome) -> None:
+    """Keeps what one call came to, for the page: the exchange it began with,
+    what the gateway made of it, and for a call that went through, whether the
+    user approved it just before, or earlier. The same call with the same
+    outcome again, as when the page checks whether the user connected yet,
+    counts as a repeat."""
+    event_id = next(_event_ids)
+    approval = None
+    if outcome.kind == "done":
+        # Held for approval with no decision heard, as when the page reloaded
+        # while it waited: going through now means the user approved it.
+        held = [request for request, (held_tool, _) in activity.awaiting.items() if held_tool == tool]
+        for request in held:
+            del activity.awaiting[request]
+        if held:
+            activity.approved.add(tool)
+        if held or tool in activity.just_approved:
+            approval = "just"
+        elif tool in activity.approved:
+            approval = "earlier"
+    # The call after an approval uses it up, whatever it came to.
+    activity.just_approved.discard(tool)
+    if outcome.kind == "consent":
+        activity.awaiting[outcome.request_id or f"unnamed-{event_id}"] = (tool, arguments)
+    event = {
+        "id": event_id, "kind": "call", "tool": tool, "arguments": arguments, "started": _iso(started),
+        "time": _iso(time.time()), "exchange": exchanged, "outcome": outcome.kind, "message": outcome.message,
+        "approval": approval, "repeats": 1,
+    }
+    same = ("kind", "tool", "arguments", "outcome", "message")
+    last = activity.events[-1] if activity.events else None
+    if last and all(last.get(k) == event[k] for k in same):
+        activity.events[-1] = {**event, "id": last["id"], "repeats": last["repeats"] + 1}
+    else:
+        activity.events.append(event)
+
+
+def _record_decision(activity: Activity, request_id: str, status: str) -> None:
+    """The user's answer to a call waiting for approval: granted, denied, or expired."""
+    tool, arguments = activity.awaiting.pop(request_id)
+    if status == "granted":
+        activity.approved.add(tool)
+        activity.just_approved.add(tool)
+    activity.events.append({"id": next(_event_ids), "kind": "decision", "tool": tool, "arguments": arguments,
+                            "decision": status, "time": _iso(time.time())})
+
+
+def _iso(seconds: float) -> str:
+    return datetime.datetime.fromtimestamp(seconds, datetime.UTC).isoformat(timespec="milliseconds")

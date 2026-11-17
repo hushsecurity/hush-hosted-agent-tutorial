@@ -23,13 +23,12 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.routing import Route
 
 from agent.gateway import ExpensesThroughGateway, Outcome
-from agent.identity import HushRefused, Identity, Session, claims
-from agent.tutorial import ExpensesSide, workload
+from agent.identity import Activity, HushRefused, Identity, Session
+from agent.tutorial import ExpensesSide, pair_with_log, workload
 
 log = logging.getLogger("agent")
 
 SESSION_COOKIE = "agent_session"
-SHOWN_CLAIMS = ("sub", "email", "act", "aud")
 
 PAGE = (pathlib.Path(__file__).parent / "page.html").read_text()
 
@@ -168,12 +167,6 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
                          "in_hush": await expenses_side.in_hush(), "assigned": assigned},
         })
 
-    async def calls(request: Request) -> JSONResponse:
-        user = request.state.session.user
-        account = str(user.claims.get("email") or "").lower() if user else ""
-        return JSONResponse({"account": account or None,
-                             "calls": await expenses_side.calls(account) if account else []})
-
     async def healthz(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
@@ -191,6 +184,7 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
             await identity.finish_sign_in(request.state.session, params.get("state", ""), params.get("code", ""))
         except HushRefused as e:
             return back_to_page(e)
+        request.state.session.activity = Activity()
         return RedirectResponse("/")
 
     async def me(request: Request) -> JSONResponse:
@@ -201,17 +195,17 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
 
     async def sign_out(request: Request) -> JSONResponse:
         request.state.session.user = None
+        request.state.session.activity = Activity()
         return JSONResponse({"ok": True})
 
-    async def exchange(request: Request) -> JSONResponse:
-        try:
-            token = await identity.exchange(request.state.session)
-        except HushRefused as e:
-            return refused(e)
-        except Exception as e:
-            return failed("the exchange", e)
-        shown = {k: v for k, v in claims(token).items() if k in SHOWN_CLAIMS}
-        return JSONResponse({"ok": True, "claims": shown})
+    async def activity(request: Request) -> JSONResponse:
+        """What the agent did for this browser's user, newest first, each call
+        that went through with what the Expenses service recorded of it."""
+        events = [dict(e) for e in reversed(request.state.session.activity.events)]
+        went_through = [e for e in events if e.get("outcome") == "done"]
+        if went_through:
+            pair_with_log(went_through, await expenses_side.calls())
+        return JSONResponse({"events": events})
 
     async def list_expenses(request: Request) -> JSONResponse:
         result = await expenses.run(request.state.session, "list_expenses", {})
@@ -250,10 +244,9 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
         Route("/signin", sign_in),
         Route("/callback", callback),
         Route("/api/setup", setup),
-        Route("/api/calls", calls),
         Route("/api/me", me),
         Route("/api/signout", sign_out, methods=["POST"]),
-        Route("/api/exchange", exchange),
+        Route("/api/activity", activity),
         Route("/api/expenses/list", list_expenses, methods=["POST"]),
         Route("/api/expenses/submit", submit_expense, methods=["POST"]),
         Route("/api/expenses/delete", delete_expense, methods=["POST"]),

@@ -13,6 +13,7 @@ isn't allowed to act for.
 
 import asyncio
 import base64
+import collections
 import dataclasses
 import hashlib
 import json
@@ -75,6 +76,19 @@ class UserTokens:
 
 
 @dataclasses.dataclass
+class Activity:
+    """What the agent did for one sign-in, for the page to show: its calls and
+    the user's approval decisions, oldest first, and the tools the user approved."""
+
+    events: collections.deque = dataclasses.field(default_factory=lambda: collections.deque(maxlen=30))
+    # Calls waiting for the user's approval, by request: (tool, arguments).
+    awaiting: dict = dataclasses.field(default_factory=dict)
+    approved: set = dataclasses.field(default_factory=set)
+    # Approved, and not called since: the next call of it is the approved one.
+    just_approved: set = dataclasses.field(default_factory=set)
+
+
+@dataclasses.dataclass
 class Session:
     """One browser's sign-in for the agent: who it is, and the sign-ins it
     started, so a sign-in finishes only in the browser that began it."""
@@ -85,6 +99,9 @@ class Session:
     # The browser named a session the agent doesn't have: it restarted, and
     # keeps sessions in memory only.
     forgotten: bool = False
+    # Replaced, never cleared, with each sign-in and sign-out: a call still
+    # running then records into the activity it began in.
+    activity: Activity = dataclasses.field(default_factory=Activity)
 
 
 class Identity:

@@ -1,3 +1,6 @@
+import datetime
+import time
+
 import httpx2
 import pytest
 
@@ -5,8 +8,8 @@ from starlette.applications import Starlette
 from starlette.routing import Mount
 
 from agent import web
-from agent.gateway import ExpensesThroughGateway
-from agent.tutorial import ExpensesSide
+from agent.gateway import ExpensesThroughGateway, Outcome
+from agent.tutorial import ExpensesSide, pair_with_log
 from expenses import internal
 from expenses.store import Store
 from setup import hush as hush_api
@@ -96,15 +99,59 @@ async def test_setup_before_the_agent_is_registered(tmp_path):
     assert setup["expenses"]["assigned"] == {"assigned": None, "error": None}
 
 
-async def test_each_user_sees_only_their_own_calls(tmp_path):
+async def test_a_call_shows_the_account_the_expenses_service_acted_on(tmp_path, monkeypatch):
     store = Store()
-    store.record("dana@example.com", "list_expenses", {}, "3 expenses")
-    store.record("sam@example.com", "list_expenses", {}, "3 expenses")
 
+    async def run(self, session, tool, arguments):
+        started = time.time()
+        store.record("work@other.example.com", tool, arguments, "3 expenses")
+        session.activity.events.append({"id": 1, "kind": "call", "tool": tool, "outcome": "done",
+                                        "started": iso(started), "time": iso(time.time())})
+        return Outcome("done", data=[])
+
+    monkeypatch.setattr(ExpensesThroughGateway, "run", run)
+    store.record("sam@example.com", "delete_expense", {"expense_id": 1}, "deleted")
     async with page_for(FakeHush(), tmp_path, store) as client:
-        assert (await client.get("/api/calls")).json() == {"account": None, "calls": []}
         await sign_in_with(client)
-        shown = (await client.get("/api/calls")).json()
+        await client.post("/api/expenses/list")
+        [event] = (await client.get("/api/activity")).json()["events"]
 
-    assert shown["account"] == "dana@example.com"
-    assert [c["account"] for c in shown["calls"]] == ["dana@example.com"]
+    assert event["seen"] == {"account": "work@other.example.com"}
+
+
+def iso(seconds: float) -> str:
+    return datetime.datetime.fromtimestamp(seconds, datetime.UTC).isoformat()
+
+
+def at(second: int) -> str:
+    return f"2026-11-17T12:00:{second:02d}+00:00"
+
+
+def paired(events: list[dict], log: list[dict]) -> list:
+    pair_with_log(events, log)
+    return [e.get("seen", {}).get("account") for e in events]
+
+
+def test_a_call_pairs_with_the_log_by_tool_and_time():
+    events = [{"tool": "list_expenses", "started": at(10), "time": at(11)},
+              {"tool": "submit_expense", "started": at(30), "time": at(31)}]
+    # Newest first, as the Expenses service keeps it.
+    log = [{"tool": "submit_expense", "time": at(50), "account": "dana@example.com"},
+           {"tool": "list_expenses", "time": at(11), "account": "dana@example.com"}]
+    assert paired(events, log) == ["dana@example.com", None]
+
+
+def test_quick_calls_on_one_account_each_show_it():
+    events = [{"tool": "list_expenses", "started": at(10), "time": at(11)},
+              {"tool": "list_expenses", "started": at(13), "time": at(14)}]
+    log = [{"tool": "list_expenses", "time": at(13), "account": "dana@example.com"},
+           {"tool": "list_expenses", "time": at(11), "account": "dana@example.com"}]
+    assert paired(events, log) == ["dana@example.com", "dana@example.com"]
+
+
+def test_another_users_call_at_the_same_time_hides_the_account():
+    events = [{"tool": "list_expenses", "started": at(10), "time": at(11)}]
+    log = [{"tool": "list_expenses", "time": at(11), "account": "sam@example.com"},
+           {"tool": "list_expenses", "time": at(11), "account": "dana@example.com"}]
+    assert paired(events, log) == [None]
+

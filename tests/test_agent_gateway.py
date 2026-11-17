@@ -1,10 +1,11 @@
 import contextlib
+import time
 
 import httpx2
 import pytest
 
-from agent.gateway import ExpensesThroughGateway
-from agent.identity import Session
+from agent.gateway import ExpensesThroughGateway, Outcome, _record_call
+from agent.identity import Activity, HushRefused, Identity, Session
 from tests.fake_gateway import APP, CONNECT_URL, CONSENT_URL, FakeGateway
 from tests.fake_hush import FakeHush
 from tests.test_agent_identity import identity_for, sign_in
@@ -125,3 +126,118 @@ async def test_a_connection_lost_since_the_app_list_asks_to_connect_again(tmp_pa
     async with agent(tmp_path, FakeGateway(connection_lost=lost)) as (expenses, session):
         outcome = await expenses.run(session, "list_expenses", {})
     assert (outcome.kind, outcome.url) == ("connect", CONNECT_URL)
+
+
+async def test_each_call_keeps_its_exchange_and_outcome(tmp_path):
+    async with agent(tmp_path, FakeGateway(policy={"delete_expense": "block"})) as (expenses, session):
+        await expenses.run(session, "list_expenses", {})
+        await expenses.run(session, "delete_expense", {"expense_id": 1})
+    listed, deleted = session.activity.events
+    assert (listed["tool"], listed["outcome"], deleted["tool"], deleted["outcome"]) == (
+        "list_expenses", "done", "delete_expense", "blocked")
+    assert listed["exchange"]["claims"]["act"] == {"sub": "agent-1"}
+    assert set(listed["exchange"]["claims"]) <= {"sub", "email", "act", "aud", "exp"}
+    assert listed["started"] <= listed["time"]
+
+
+async def test_the_same_call_with_the_same_outcome_counts_as_a_repeat(tmp_path):
+    async with agent(tmp_path, FakeGateway(connection="disconnected")) as (expenses, session):
+        for _ in range(3):
+            await expenses.run(session, "list_expenses", {})
+    [event] = session.activity.events
+    assert (event["outcome"], event["repeats"]) == ("connect", 3)
+
+
+async def test_a_refused_exchange_is_kept(tmp_path):
+    async with agent(tmp_path, FakeGateway(), FakeHush(user_email="sam@example.com")) as (expenses, session):
+        await expenses.run(session, "list_expenses", {})
+    [event] = session.activity.events
+    assert event["outcome"] == "not_assigned"
+    assert "claims" not in event["exchange"] and event["exchange"]["error"]
+
+
+async def test_a_failed_refresh_is_not_the_exchanges(tmp_path, monkeypatch):
+    async def hush_down(self, session):
+        raise HushRefused("refresh", 503, "temporarily_unavailable", "Hush is down")
+
+    async with agent(tmp_path, FakeGateway()) as (expenses, session):
+        monkeypatch.setattr(Identity, "user_token", hush_down)
+        await expenses.run(session, "list_expenses", {})
+    [event] = session.activity.events
+    assert (event["outcome"], event["exchange"]) == ("error", {})
+    assert event["message"] == "Hush failed: Hush is down"
+
+
+async def test_an_add_knows_whether_the_user_approved_it(tmp_path):
+    hotel = {"description": "Hotel", "amount": 210}
+    gateway = FakeGateway(policy={"submit_expense": "consent"})
+    async with agent(tmp_path, gateway) as (expenses, session):
+        await expenses.run(session, "submit_expense", hotel)
+        gateway.consent = "granted"
+        await expenses.consent_status(session, "req-1")
+        await expenses.run(session, "submit_expense", hotel)
+        await expenses.run(session, "submit_expense", {**hotel, "description": "Taxi"})
+    waited, decided, approved, later = session.activity.events
+    assert (waited["outcome"], decided["kind"], decided["decision"]) == ("consent", "decision", "granted")
+    assert (approved["approval"], later["approval"]) == ("just", "earlier")
+
+
+async def test_a_declined_add_is_kept_and_approves_nothing(tmp_path):
+    gateway = FakeGateway(policy={"submit_expense": "consent"})
+    async with agent(tmp_path, gateway) as (expenses, session):
+        await expenses.run(session, "submit_expense", {"description": "Hotel", "amount": 210})
+        gateway.consent = "denied"
+        await expenses.consent_status(session, "req-1")
+    assert session.activity.events[-1]["decision"] == "denied"
+    assert not session.activity.approved
+
+
+async def test_a_call_running_across_a_sign_out_stays_in_its_own_history(tmp_path, monkeypatch):
+    async with agent(tmp_path, FakeGateway()) as (expenses, session):
+        before = session.activity
+        exchange = Identity.exchange
+
+        async def sign_out_meanwhile(self, session):
+            session.activity = Activity()
+            return await exchange(self, session)
+
+        monkeypatch.setattr(Identity, "exchange", sign_out_meanwhile)
+        await expenses.run(session, "list_expenses", {})
+    assert [e["tool"] for e in before.events] == ["list_expenses"]
+    assert not session.activity.events
+
+
+async def test_an_add_held_with_no_decision_heard_counts_as_approved_when_it_goes_through(tmp_path):
+    # The page reloaded while it waited, so the decision was never asked for.
+    hotel = {"description": "Hotel", "amount": 210}
+    gateway = FakeGateway(policy={"submit_expense": "consent"})
+    async with agent(tmp_path, gateway) as (expenses, session):
+        await expenses.run(session, "submit_expense", hotel)
+        gateway.consent = "granted"
+        await expenses.run(session, "submit_expense", hotel)
+    assert session.activity.events[-1]["approval"] == "just"
+    assert not session.activity.awaiting
+
+
+def test_an_add_held_without_a_request_counts_as_approved_when_it_goes_through():
+    activity = Activity()
+    _record_call(activity, "submit_expense", {}, time.time(), {}, Outcome("consent"))
+    _record_call(activity, "submit_expense", {}, time.time(), {}, Outcome("done"))
+    assert activity.events[-1]["approval"] == "just"
+    assert not activity.awaiting
+
+
+async def test_an_approval_is_used_up_by_the_next_call_whatever_it_came_to(tmp_path):
+    hotel = {"description": "Hotel", "amount": 210}
+    gateway = FakeGateway(policy={"submit_expense": "consent"})
+    async with agent(tmp_path, gateway) as (expenses, session):
+        await expenses.run(session, "submit_expense", hotel)
+        gateway.consent = "granted"
+        await expenses.consent_status(session, "req-1")
+        gateway.fail = True
+        await expenses.run(session, "submit_expense", hotel)
+        gateway.fail = False
+        await expenses.run(session, "submit_expense", hotel)
+    failed, later = list(session.activity.events)[-2:]
+    assert (failed["outcome"], later["outcome"], later["approval"]) == ("error", "done", "earlier")
+

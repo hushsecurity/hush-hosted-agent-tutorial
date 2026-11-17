@@ -33,20 +33,32 @@ async def signed_in_client(hush: FakeHush, tmp_path) -> httpx2.AsyncClient:
     return client
 
 
-async def test_signed_in_user_and_the_agents_token(tmp_path):
+async def test_signed_in_user(tmp_path):
     client = await signed_in_client(FakeHush(), tmp_path)
-
     assert (await client.get("/api/me")).json()["email"] == "dana@example.com"
-    exchanged = (await client.get("/api/exchange")).json()
-    assert exchanged["claims"]["act"] == {"sub": "agent-1"}
 
 
 async def test_refused_when_not_assigned(tmp_path):
     client = await signed_in_client(FakeHush(user_email="sam@example.com"), tmp_path)
+    assert (await client.post("/api/expenses/list")).json()["kind"] == "not_assigned"
 
-    resp = await client.get("/api/exchange")
-    assert resp.status_code == 403
-    assert resp.json()["not_assigned"]
+
+async def test_the_activity_is_this_users_newest_first_and_ends_with_the_sign_in(tmp_path, monkeypatch):
+    async def run(self, session, tool, arguments):
+        session.activity.events.append({"tool": tool})
+        return Outcome("done", data=[])
+
+    monkeypatch.setattr(ExpensesThroughGateway, "run", run)
+    client = await signed_in_client(FakeHush(), tmp_path)
+    await client.post("/api/expenses/list")
+    await client.post("/api/expenses/delete", content='{"expense_id": 1}')
+    assert [e["tool"] for e in (await client.get("/api/activity")).json()["events"]] == ["delete_expense", "list_expenses"]
+
+    other = httpx2.AsyncClient(transport=client._transport, base_url=AGENT_URL)
+    assert (await other.get("/api/activity")).json() == {"events": []}
+
+    await client.post("/api/signout")
+    assert (await client.get("/api/activity")).json() == {"events": []}
 
 
 async def test_a_sign_in_hush_refuses_keeps_no_session(tmp_path):
@@ -72,7 +84,7 @@ async def test_another_browser_is_not_signed_in(tmp_path):
     other = httpx2.AsyncClient(transport=client._transport, base_url=AGENT_URL)
 
     assert (await other.get("/api/me")).json() == {"signed_in": False}
-    assert (await other.get("/api/exchange")).status_code == 401
+    assert (await other.post("/api/expenses/list")).json()["kind"] == "signed_out"
 
 
 async def test_no_session_until_a_sign_in_starts(tmp_path):
@@ -93,9 +105,9 @@ async def test_an_exchange_that_fails_is_reported(tmp_path):
     client = await signed_in_client(FakeHush(), tmp_path)
     (tmp_path / "token").unlink()
 
-    resp = await client.get("/api/exchange")
-    assert resp.status_code == 502
-    assert resp.json()["ok"] is False
+    assert (await client.post("/api/expenses/list")).json()["kind"] == "error"
+    [event] = (await client.get("/api/activity")).json()["events"]
+    assert "token" in event["exchange"]["error"]
 
 
 async def test_a_consent_check_that_fails_is_reported(tmp_path):
@@ -137,7 +149,7 @@ async def test_a_whole_number_id_is_accepted(tmp_path, monkeypatch):
 async def test_a_session_the_agent_no_longer_has_is_told_to_sign_in_again(tmp_path):
     client = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app_for(FakeHush(), tmp_path)),
                                 base_url=AGENT_URL, cookies={web.SESSION_COOKIE: "from-before-a-restart"})
-    assert "sign in again" in (await client.get("/api/exchange")).json()["message"]
+    assert "sign in again" in (await client.post("/api/expenses/list")).json()["message"]
 
     # Signed in again, the session is like any other: losing the sign-in later
     # isn't a restart.
@@ -146,10 +158,10 @@ async def test_a_session_the_agent_no_longer_has_is_told_to_sign_in_again(tmp_pa
     await client.get("/callback", params={"state": state, "code": "code-1"})
     assert (await client.get("/api/me")).json()["signed_in"]
     await client.post("/api/signout")
-    assert (await client.get("/api/exchange")).json()["message"] == "sign in first"
+    assert (await client.post("/api/expenses/list")).json()["message"] == "sign in first"
 
     fresh = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app_for(FakeHush(), tmp_path)), base_url=AGENT_URL)
-    assert (await fresh.get("/api/exchange")).json()["message"] == "sign in first"
+    assert (await fresh.post("/api/expenses/list")).json()["message"] == "sign in first"
 
 
 NO_OUTCOME = {"message": "", "data": None, "url": None, "request_id": None}

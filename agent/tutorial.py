@@ -1,7 +1,9 @@
 """What the tutorial page shows besides the agent's work: who the agent is to
 Hush, and what Expenses saw."""
 
+import datetime
 import logging
+import math
 from urllib.parse import quote
 
 import httpx2
@@ -39,10 +41,9 @@ class ExpensesSide:
     async def about(self) -> dict:
         return await self._get(self.internal_url, "/about", {})
 
-    async def calls(self, account: str) -> list[dict]:
-        """The calls made on `account` only: the page shows each user their own."""
-        calls = await self._get(self.internal_url, "/calls", [])
-        return [c for c in calls if isinstance(c, dict) and c.get("account") == account]
+    async def calls(self) -> list[dict]:
+        """The Expenses service's log of the calls it got, on any account."""
+        return [c for c in await self._get(self.internal_url, "/calls", []) if isinstance(c, dict)]
 
     async def in_hush(self) -> dict:
         return await self._get(self.setup_url, "/status", {"state": "unknown"})
@@ -60,3 +61,27 @@ class ExpensesSide:
         except (httpx2.HTTPError, ValueError) as e:
             log.warning("reading %s%s failed: %s", base, path, e)
             return default
+
+
+def pair_with_log(events: list[dict], calls: list[dict]) -> None:
+    """Adds `seen` to each call that went through: the account the Expenses
+    service acted on, which may not be the user's Hush email. The gateway
+    passes nothing both sides could match on, so a call is paired by tool and
+    time, with the service's log entries on any account. The call's own entry
+    is always among them, so when they all name one account, it's this call's;
+    when they don't, as when another user made the same call at the same time,
+    the account stays unknown rather than maybe another user's."""
+    def at(iso) -> float | None:
+        try:
+            return datetime.datetime.fromisoformat(iso).timestamp()
+        except (TypeError, ValueError):
+            return None
+
+    logged = [(at(c.get("time")), c.get("tool"), c.get("account")) for c in calls]
+    for event in events:
+        # The log keeps whole seconds.
+        earliest, latest = math.floor(at(event["started"])) - 1, at(event["time"]) + 2
+        accounts = {account for when, tool, account in logged
+                    if tool == event["tool"] and when is not None and earliest <= when <= latest}
+        if len(accounts) == 1:
+            event["seen"] = {"account": accounts.pop()}
