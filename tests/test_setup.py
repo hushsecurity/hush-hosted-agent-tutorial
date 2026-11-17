@@ -158,12 +158,13 @@ async def test_tells_whether_expenses_is_assigned_to_the_agent():
         assert (await c.get("/assigned/agt-1")).json()["assigned"] is True
 
 
-async def test_a_failed_assignment_check_is_reported():
+async def test_a_failed_assignment_check_is_reported_and_logged_once(caplog):
     fake = FakeHushAPI()
     setup = Setup(fake.client())
     setup.api, setup.app_id = api_for(fake), "app-gone"
     assert (await setup.assigned_to("agt-1"))["assigned"] is None
     assert "404" in (await setup.assigned_to("agt-1"))["error"]
+    assert len([r for r in caplog.records if "assignments failed" in r.getMessage()]) == 1
 
 
 async def test_an_app_the_tutorial_did_not_make_is_left_alone():

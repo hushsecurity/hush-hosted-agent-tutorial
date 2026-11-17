@@ -1,32 +1,18 @@
 {{- $agent := include "tutorial.componentName" (list . "agent") -}}
-The tutorial is installed in namespace {{ .Release.Namespace }}. The agent runs as
-service account system:serviceaccount:{{ .Release.Namespace }}:{{ .Values.agent.serviceAccount }}:
-it must match the agent you registered in Hush.
-
-Open the agent's page:
+Open the tutorial's page:
 
   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ $agent }} {{ .Values.agent.port }}:{{ .Values.agent.port }}
 
-then browse to {{ .Values.agent.url }} and follow the steps.
-{{- if include "tutorial.tunnel" . }}
-
-The Expenses service is public, through a Cloudflare quick tunnel: the page shows its
-address, and the access code its sign-in asks for.
-{{- else }}
+then browse to {{ .Values.agent.url }} and follow the page.
+{{- if not (include "tutorial.tunnel" .) }}
 
 The Expenses service is at {{ .Values.expenses.url }}: serve the {{ include "tutorial.componentName" (list . "expenses") }} Service there.
 {{- end }}
-
-The tutorial puts the Expenses service in Hush as "Expenses (tutorial)": in the catalog
-as {{ .Values.expenses.name }}, and on your Hush Identity Gateway for all
-users. Assign it to your agent in Hush (Applications, then its Assignments):
-the page shows how.
 
 Uninstall before the API key expires: it also takes the Expenses service out of Hush.
 
   helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
 
-Then delete the agent in the Hush UI, and the API key unless it has expired.
 If uninstalling fails, for example because the key has expired, remove
 "Expenses (tutorial)" in the Hush UI, first from Applications, then from
 Catalog, and run:

@@ -79,6 +79,8 @@ class Setup:
         self.status = {"state": "working", "error": None}
         self.api: hush.HushAPI | None = None
         self.app_id: str | None = None
+        # The page asks every few seconds: a failure is logged when it changes.
+        self.assigned_error: str | None = None
 
     async def put(self) -> None:
         """Until Hush has Expenses: a missing scope or a gateway still
@@ -111,10 +113,15 @@ class Setup:
         if self.app_id is None:
             return {"assigned": None, "error": None}
         try:
-            return {"assigned": await hush.assigned_to(self.api, self.app_id, agent_id), "error": None}
+            assigned = await hush.assigned_to(self.api, self.app_id, agent_id)
         except Exception as e:
-            log.warning("reading Expenses' assignments failed: %s", e)
-            return {"assigned": None, "error": explain(e)}
+            error = explain(e)
+            if error != self.assigned_error:
+                log.warning("reading Expenses' assignments failed: %s", e)
+            self.assigned_error = error
+            return {"assigned": None, "error": error}
+        self.assigned_error = None
+        return {"assigned": assigned, "error": None}
 
 
 def explain(e: Exception) -> str:

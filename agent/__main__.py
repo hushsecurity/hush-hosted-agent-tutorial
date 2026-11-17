@@ -8,7 +8,8 @@ AGENT_TOKEN_FILE   The pod's service account token, issued for the gateway
 EXPENSES_APP       Expenses' name on the gateway (default custom-expenses)
 EXPENSES_INTERNAL  Expenses' internal address, for the page to show what it saw
 SETUP_INTERNAL     Setup's address, for the page to show whether Hush has Expenses
-HELM_RELEASE       The tutorial's Helm release, for the page's clean-up command
+HELM_RELEASE       The tutorial's Helm release, for the page's commands
+CHART_VERSION      The tutorial's chart version, for the page's upgrade command
 """
 
 import logging
@@ -40,7 +41,8 @@ def main() -> None:
     )
     expenses = ExpensesThroughGateway(identity, os.getenv("EXPENSES_APP", "custom-expenses"))
     expenses_side = ExpensesSide(http, os.getenv("EXPENSES_INTERNAL"), os.getenv("SETUP_INTERNAL"))
-    config = uvicorn.Config(web.build(identity, expenses, agent_url, expenses_side, os.getenv("HELM_RELEASE")),
+    config = uvicorn.Config(web.build(identity, expenses, agent_url, expenses_side, os.getenv("HELM_RELEASE"),
+                                      os.getenv("CHART_VERSION")),
                             host="0.0.0.0", port=PORT)
     # After the Config: it sets up uvicorn's loggers.
     logging.getLogger("uvicorn.access").addFilter(web.WithoutQueries())

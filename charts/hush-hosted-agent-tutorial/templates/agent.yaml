@@ -57,6 +57,8 @@ spec:
               value: {{ printf "http://%s-internal:%v" (include "tutorial.componentName" (list . "expenses")) .Values.expenses.internalPort | quote }}
             - name: HELM_RELEASE
               value: {{ .Release.Name | quote }}
+            - name: CHART_VERSION
+              value: {{ .Chart.Version | quote }}
             - name: SETUP_INTERNAL
               value: {{ printf "http://%s:%v" (include "tutorial.componentName" (list . "setup")) .Values.setup.port | quote }}
           ports:

@@ -199,8 +199,7 @@ def _page(message: str = "", form: str | None = None, ask_code: bool = False, em
          value="{html.escape(email)}">{_code_field() if ask_code else ""}
   <button type="submit">Sign in</button>
 </form>
-<p class="note">A demo app: it trusts the email you type, with no password. Use the
-same email you sign in to your company with, so both show the same person.</p>"""
+<p class="note">A demo app: no password. Use your company email.</p>"""
     return HTMLResponse(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -225,7 +224,7 @@ same email you sign in to your company with, so both show the same person.</p>""
 def _code_field() -> str:
     return """
   <label for="code" class="second">Access code</label>
-  <input id="code" name="code" required autocomplete="off" placeholder="From the tutorial page">"""
+  <input id="code" name="code" required autocomplete="off" placeholder="Shown on the tutorial page">"""
 
 
 def _b64(data: bytes) -> str:

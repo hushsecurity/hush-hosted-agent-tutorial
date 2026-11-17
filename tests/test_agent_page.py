@@ -49,7 +49,7 @@ def page_for(hush: FakeHush, tmp_path, store: Store, internal_url: str | None = 
                                 Mount("/setup", status_app(setup_with(assignments or [])))])
     side = ExpensesSide(httpx2.AsyncClient(transport=httpx2.ASGITransport(app=cluster)), internal_url, setup_url)
     app = web.build(identity, ExpensesThroughGateway(identity, "custom-expenses-tutorial"), AGENT_URL, side,
-                    release="tutorial")
+                    release="tutorial", chart_version="0.1.0")
     return httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL)
 
 
@@ -69,7 +69,7 @@ async def test_setup_shows_what_to_enter_in_hush(tmp_path):
     assert setup["gateway"] == {"url": f"{GATEWAY}/mcp", "issuer": ISSUER, "error": None}
     assert setup["expenses"] == {"app": "custom-expenses-tutorial", "url": EXPENSES_URL, "access_code": "code-1",
                                  "in_hush": IN_HUSH, "assigned": {"assigned": False, "error": None}}
-    assert setup["release"] == "tutorial"
+    assert (setup["release"], setup["chart_version"]) == ("tutorial", "0.1.0")
 
 
 async def test_setup_tells_once_expenses_is_assigned_to_the_agent(tmp_path):

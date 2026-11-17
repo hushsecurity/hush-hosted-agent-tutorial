@@ -131,7 +131,7 @@ def expense_id_of(body: dict) -> int:
 
 
 def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: ExpensesSide,
-           release: str | None) -> list[Route]:
+           release: str | None, chart_version: str | None) -> list[Route]:
     async def index(request: Request) -> HTMLResponse:
         return HTMLResponse(PAGE, headers={"Cache-Control": "no-store"})
 
@@ -161,6 +161,7 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
         assigned = await expenses_side.assigned_to(agent_id) if agent_id else {"assigned": None, "error": None}
         return JSONResponse({
             "release": release,
+            "chart_version": chart_version,
             "agent": {**workload(identity), "hush": hush},
             "gateway": {"url": identity.gateway_url, "issuer": issuer, "error": error},
             "expenses": {"app": expenses.app, "url": about.get("url"), "access_code": about.get("access_code"),
@@ -259,12 +260,13 @@ async def bad_input(request: Request, e: BadInput) -> JSONResponse:
 
 
 def build(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str,
-          expenses_side: ExpensesSide | None = None, release: str | None = None) -> Starlette:
+          expenses_side: ExpensesSide | None = None, release: str | None = None,
+          chart_version: str | None = None) -> Starlette:
     """`agent_url` is where browsers reach the agent. `expenses_side` reads
-    what Expenses saw, for the page. `release` is the tutorial's Helm
-    release, for the page's clean-up command."""
+    what Expenses saw, for the page. `release` and `chart_version` are the
+    tutorial's Helm release and chart version, for the page's commands."""
     agent_url = agent_url.rstrip("/")
     expenses_side = expenses_side or ExpensesSide(identity.http, None)
-    return Starlette(routes=routes(identity, expenses, expenses_side, release),
+    return Starlette(routes=routes(identity, expenses, expenses_side, release, chart_version),
                      middleware=[Middleware(Sessions, secure=agent_url.startswith("https://"))],
                      exception_handlers={BadInput: bad_input})
