@@ -155,7 +155,7 @@ publish: check-clean check-registry check-unreleased check-platforms login
 # requirements.in. Run it after changing requirements.in, or to upgrade.
 .PHONY: lock
 lock:
-	@uv pip compile -q --no-annotate --python-version 3.11 requirements.in -o requirements.txt
+	@uv pip compile -q --no-annotate --python-version 3.13 requirements.in -o requirements.txt
 
 .PHONY: clean
 clean:

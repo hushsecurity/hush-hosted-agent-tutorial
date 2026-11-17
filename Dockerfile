@@ -1,6 +1,6 @@
-# Packages are installed here, with the same Python (3.11) and C library
-# (Debian 12) as the image they run in.
-FROM python:3.11-slim-bookworm@sha256:a83ba18aef0f865b1a4a611c2cf460fe446f2795673bbb9fe43be570439e3b39 AS build
+# Packages are installed here, with the same Python (3.13) and C library
+# (Debian 13) as the image they run in.
+FROM python:3.13-slim-trixie AS build
 
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --no-compile --root-user-action=ignore --target /app/packages -r /tmp/requirements.txt
@@ -13,7 +13,7 @@ COPY setup /app/setup
 RUN python -m compileall -q /app && chmod -R go-w /app
 
 # No shell, no package manager: only Python and the code.
-FROM gcr.io/distroless/python3-debian12:nonroot@sha256:7d1042ce588ab97019fe95c24ffca7bc5a82ccdac572511d5e09bda4435c89c5
+FROM gcr.io/distroless/python3-debian13:nonroot
 
 COPY --from=build /app /app
 
@@ -23,5 +23,5 @@ ENV PYTHONPATH=/app/packages \
     PYTHONUNBUFFERED=1
 
 # One image, three programs: `agent` (the default), `expenses` or `setup`.
-ENTRYPOINT ["/usr/bin/python3.11", "-m"]
+ENTRYPOINT ["/usr/bin/python3.13", "-m"]
 CMD ["agent"]

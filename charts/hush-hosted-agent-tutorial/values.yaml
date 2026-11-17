@@ -74,7 +74,7 @@ setup:
     limits: {memory: 256Mi}
 
 tunnel:
-  image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+  image: cloudflare/cloudflared:2026.10.7
   # Where Expenses reads the tunnel's address from.
   metricsPort: 2000
   resources:
