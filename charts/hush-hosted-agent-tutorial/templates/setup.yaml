@@ -47,6 +47,8 @@ spec:
           env:
             {{- include "tutorial.setupEnv" . | nindent 12 }}
             {{- include "tutorial.expensesAddressEnv" . | nindent 12 }}
+            - name: EXPENSES_SERVICE
+              value: {{ printf "http://%s:%v" (include "tutorial.componentName" (list . "expenses")) .Values.expenses.port | quote }}
             - name: SETUP_PORT
               value: {{ .Values.setup.port | quote }}
           ports:

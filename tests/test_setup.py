@@ -7,12 +7,13 @@ import pytest
 
 import setup.__main__ as setup_main
 from setup import hush
-from setup.__main__ import Setup, explain, status_app
+from setup.__main__ import Setup, answering, explain, status_app
 from tests.fake_hush_api import API, KEY, FakeHushAPI
 
 pytestmark = pytest.mark.anyio
 
 EXPENSES = hush.Expenses("expenses-tutorial", "dep-1", "https://calm-river.trycloudflare.com")
+SERVICE = "http://tutorial-expenses:8000"
 
 
 def api_for(fake: FakeHushAPI) -> hush.HushAPI:
@@ -99,6 +100,28 @@ def test_the_api_and_the_gateway_come_from_its_issuer():
         "https://api.example.com", "dep-1")
     with pytest.raises(ValueError):
         hush.api_and_deployment("https://hush.example.com/agents")
+
+
+async def test_waits_for_expenses_to_answer_inside_the_cluster():
+    answers = [httpx2.ConnectError("refused"), httpx2.Response(502), httpx2.Response(200, json={})]
+    asked = []
+
+    def handle(request: httpx2.Request) -> httpx2.Response:
+        asked.append(str(request.url))
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(handle)) as http:
+        await answering(http, SERVICE, interval=0)
+    assert asked == [f"{SERVICE}/.well-known/oauth-protected-resource/mcp"] * 3
+
+
+async def test_gives_up_on_expenses_that_never_answers():
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(lambda r: httpx2.Response(502))) as http:
+        with pytest.raises(RuntimeError, match="doesn't answer"):
+            await answering(http, SERVICE, attempts=3, interval=0)
 
 
 async def test_ready_only_once_expenses_is_in_hush():
@@ -204,3 +227,23 @@ async def test_a_tunnel_without_an_address_is_a_failed_status(monkeypatch):
         async with asyncio.timeout(0.05):
             await setup.put()
     assert setup.status == {"state": "failed", "error": "the tunnel reported no address"}
+
+
+async def test_hush_learns_the_address_only_once_expenses_answers(monkeypatch):
+    fake = FakeHushAPI()
+
+    async def with_fake_hush(http, with_url):
+        return api_for(fake), EXPENSES
+
+    async def not_yet(http, url):
+        raise RuntimeError(f"Expenses doesn't answer at {url}")
+
+    setup = Setup(fake.client(), SERVICE)
+    monkeypatch.setattr(setup_main, "expenses_in_hush", with_fake_hush)
+    monkeypatch.setattr(setup_main, "answering", not_yet)
+    monkeypatch.setattr(setup_main, "RETRY_SECONDS", 0.01)
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.05):
+            await setup.put()
+    assert fake.calls == []
+    assert setup.status == {"state": "failed", "error": f"Expenses doesn't answer at {SERVICE}"}

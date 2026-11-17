@@ -9,6 +9,8 @@ HUSH_API_KEY_SECRET    applications:write
 EXPENSES_NAME          Expenses' name in the Hush catalog (default expenses-tutorial)
 EXPENSES_URL           Expenses' public address
 EXPENSES_TUNNEL        Or: the quick tunnel's metrics address, to take it from
+EXPENSES_SERVICE       Expenses' public port inside the cluster: Hush hears of
+                       Expenses only once it answers there
 """
 
 import asyncio
@@ -52,11 +54,28 @@ async def expenses_in_hush(http: httpx2.AsyncClient, with_url: bool) -> tuple[hu
     return api, expenses
 
 
+async def answering(http: httpx2.AsyncClient, url: str, attempts: int = 60, interval: float = 2) -> None:
+    """Returns once Expenses answers at url. Hush checks Expenses as soon as
+    it learns its address, and the gateway keeps what that check found: a check
+    made before Expenses is up leaves the gateway failing. Asked inside the
+    cluster, so that its public address needn't be reachable from here."""
+    for _ in range(attempts):
+        try:
+            if (await http.get(f"{url}/.well-known/oauth-protected-resource/mcp")).is_success:
+                return
+        except httpx2.HTTPError:
+            pass
+        log.info("waiting for Expenses at %s", url)
+        await asyncio.sleep(interval)
+    raise RuntimeError(f"Expenses doesn't answer at {url}")
+
+
 class Setup:
     """Puts Expenses in Hush, then answers the agent's page about it."""
 
-    def __init__(self, http: httpx2.AsyncClient):
+    def __init__(self, http: httpx2.AsyncClient, expenses_service: str | None = None):
         self.http = http
+        self.expenses_service = expenses_service
         self.status = {"state": "working", "error": None}
         self.api: hush.HushAPI | None = None
         self.app_id: str | None = None
@@ -69,6 +88,8 @@ class Setup:
             try:
                 if expenses is None:
                     self.api, expenses = await expenses_in_hush(self.http, with_url=True)
+                if self.expenses_service:
+                    await answering(self.http, self.expenses_service)
                 app = await hush.put(self.api, expenses)
             except Exception as e:
                 log.warning("putting Expenses in Hush failed, retrying: %s", e)
@@ -136,7 +157,7 @@ def status_app(setup: Setup) -> Starlette:
 
 async def main() -> None:
     async with httpx2.AsyncClient(timeout=30) as http:
-        setup = Setup(http)
+        setup = Setup(http, os.getenv("EXPENSES_SERVICE"))
         server = uvicorn.Server(uvicorn.Config(status_app(setup), host="0.0.0.0", port=PORT))
         await asyncio.gather(server.serve(), setup.put())
 
