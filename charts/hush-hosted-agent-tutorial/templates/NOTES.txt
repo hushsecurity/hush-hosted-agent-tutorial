@@ -10,19 +10,19 @@ Open the agent's page:
 then browse to {{ .Values.agent.url }} and follow the steps.
 {{- if include "tutorial.tunnel" . }}
 
-Expenses is public, through a Cloudflare quick tunnel: the page shows its
+The Expenses service is public, through a Cloudflare quick tunnel: the page shows its
 address, and the access code its sign-in asks for.
 {{- else }}
 
-Expenses is at {{ .Values.expenses.url }}: serve the {{ include "tutorial.componentName" (list . "expenses") }} Service there.
+The Expenses service is at {{ .Values.expenses.url }}: serve the {{ include "tutorial.componentName" (list . "expenses") }} Service there.
 {{- end }}
 
-The tutorial puts Expenses in Hush as "Expenses (tutorial)": in the catalog
+The tutorial puts the Expenses service in Hush as "Expenses (tutorial)": in the catalog
 as {{ .Values.expenses.name }}, and on your Hush Identity Gateway for all
 users. Assign it to your agent in Hush (Applications, then its Assignments):
 the page shows how.
 
-Uninstall before the API key expires: it also takes Expenses out of Hush.
+Uninstall before the API key expires: it also takes the Expenses service out of Hush.
 
   helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
 

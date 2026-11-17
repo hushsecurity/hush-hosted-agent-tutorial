@@ -15,8 +15,8 @@ in your own cluster, in a few guided steps:
   through, a write waits for the user's approval, a delete is blocked.
 
 The agent reaches apps only through your Hush Identity Gateway. The chart
-deploys an expenses assistant (the agent) and Expenses, a sample app it works
-on, in their own namespace.
+deploys an expenses assistant (the agent) and the Expenses service, a sample
+app it works on, in their own namespace.
 
 ## Before you start
 
@@ -25,8 +25,8 @@ on, in their own namespace.
   the internet, as on EKS, GKE or AKS. Hush checks the agent's token there.
 - Helm 3 and kubectl
 - A Hush API key with only the Applications Read and Applications Write
-  scopes, expiring in a few hours. The tutorial uses it to put Expenses in
-  Hush, and to take it out when you uninstall.
+  scopes, expiring in a few hours. The tutorial uses it to put the Expenses
+  service in Hush, and to take it out when you uninstall.
 
 ## Run it
 
@@ -66,31 +66,32 @@ agent, run the port-forward again.
 ## What you'll see
 
 1. **Register the agent** in Hush, by its Kubernetes identity.
-2. **Grant it access to Expenses**, and see the policy Hush set on each tool.
-3. **Try the assistant**: sign in, connect your Expenses account, then list,
+2. **Grant it access to the Expenses service**, and see the policy Hush set on
+   each tool.
+3. **Try the assistant**: sign in, connect the Expenses service, then list,
    add and delete expenses, and see what Hush lets through.
 4. **Recap**, and how to clean up.
 
 ## What it installs
 
-- In `hush-hosted-agent-tutorial`: the agent and its page, Expenses, a setup
-  service that holds the API key, and a Cloudflare quick tunnel.
+- In `hush-hosted-agent-tutorial`: the agent and its page, the Expenses service,
+  a setup service that holds the API key, and a Cloudflare quick tunnel.
 - In Hush: "Expenses (tutorial)", in the catalog and on your gateway for all
   users.
 
-## Expenses is public
+## The Expenses service is public
 
-The gateway must reach Expenses, so by default a Cloudflare quick tunnel gives
-it a random public address. Cloudflare sees that traffic, and signing in to
-Expenses asks for an access code the page shows. Some endpoint security tools
-flag `cloudflared`.
+The gateway must reach the Expenses service, so by default a Cloudflare quick
+tunnel gives it a random public address. Cloudflare sees that traffic, and
+signing in to the Expenses service asks for an access code the page shows. Some
+endpoint security tools flag `cloudflared`.
 
 To use your own address instead, put a load balancer or ingress with HTTPS in
 front of the `hush-hosted-agent-tutorial-expenses` Service (port 8000), and set
 `expenses.url` to its address at install.
 
-If the tunnel's pod restarts, its address changes. Restart Expenses and setup
-so Hush learns the new one:
+If the tunnel's pod restarts, its address changes. Restart the Expenses service
+and setup so Hush learns the new one:
 
 ```bash
 kubectl rollout restart -n hush-hosted-agent-tutorial \
@@ -99,7 +100,8 @@ kubectl rollout restart -n hush-hosted-agent-tutorial \
 
 ## Clean up
 
-Uninstall before the API key expires: it takes Expenses out of Hush too.
+Uninstall before the API key expires: it takes the Expenses service out of Hush
+too.
 
 ```bash
 helm uninstall tutorial -n hush-hosted-agent-tutorial

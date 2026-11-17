@@ -208,7 +208,7 @@
   .add .abtn { justify-self: start; }
   .fine { font: 12px/1.4 var(--mono); color: var(--app-muted); overflow-wrap: anywhere; max-width: 40ch; }
 
-  /* Behind the assistant: the token it acts with, and the calls Expenses got. */
+  /* Behind the assistant: the token it acts with, and the calls the Expenses service got. */
   .behind { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 28px; margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--line); }
   @media (max-width: 980px) { .behind { grid-template-columns: minmax(0, 1fr); } }
   .panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -261,7 +261,7 @@
         <div id="claims"></div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>What Expenses saw</h2><span class="sub" id="log-sub"></span></div>
+        <div class="panel-head"><h2>What the Expenses service saw</h2><span class="sub" id="log-sub"></span></div>
         <div class="table-scroll" id="log"></div>
       </div>
     </section>
@@ -272,7 +272,7 @@
   const STEPS = [
     { key: "welcome", title: "Welcome" },
     { key: "agent", title: "Register the agent" },
-    { key: "access", title: "Grant access to Expenses" },
+    { key: "access", title: "Grant access to the Expenses service" },
     { key: "try", title: "Try the assistant" },
     { key: "recap", title: "Recap" },
   ];
@@ -430,9 +430,9 @@
   function inHushStatus() {
     const h = inHush();
     if (h.state === "ready") return `<p class="status ok">✓ <span>Hush has <b>${esc(appName())}</b>: in the catalog, and on your gateway for all users.</span></p>`;
-    if (h.state === "failed") return `<p class="warn">The tutorial couldn't put Expenses in Hush yet, and keeps trying: ${esc(h.error)}</p>`;
-    if (h.state === "working") return `<p class="status wait">${spinner}<span>The tutorial is putting Expenses in Hush…</span></p>`;
-    return `<p class="warn">Can't tell whether Expenses is in Hush: is the tutorial's setup pod running?</p>`;
+    if (h.state === "failed") return `<p class="warn">The tutorial couldn't put the Expenses service in Hush yet, and keeps trying: ${esc(h.error)}</p>`;
+    if (h.state === "working") return `<p class="status wait">${spinner}<span>The tutorial is putting the Expenses service in Hush…</span></p>`;
+    return `<p class="warn">Can't tell whether the Expenses service is in Hush: is the tutorial's setup pod running?</p>`;
   }
 
   // ---- Steps -------------------------------------------------------------------
@@ -444,7 +444,7 @@
     return `
       <h1>An agent that works for your users</h1>
       <p>An expenses assistant, an agent running in your Kubernetes cluster, keeps your expense reports up to date
-        for you. It reaches Expenses, one of your company's apps, only through your Hush Identity Gateway, and Hush
+        for you. It reaches the Expenses service, one of your company's apps, only through your Hush Identity Gateway, and Hush
         decides what it may do, and for whom.</p>
       <p class="note">You need an admin's access to the Hush UI.</p>
       <h2>Already in place</h2>
@@ -452,16 +452,16 @@
       <ul class="points">
         <li><span><b>The assistant</b>: the agent, running${namespace ? ` in namespace <code>${esc(namespace)}</code> as
           service account <code>${esc(account)}</code>` : ""}. It holds no secret.</span></li>
-        <li><span><b>Expenses</b>: a small MCP app standing in for one of your company's apps${url ? `, public at
+        <li><span><b>The Expenses service</b>: a small MCP app standing in for one of your company's apps${url ? `, public at
           <code>${esc(url)}</code>` : ""}. It has its own accounts.</span></li>
-        <li><span><b>${esc(appName())}</b> in Hush: the Expenses app, in Hush's catalog and on your Hush Identity Gateway for all users.</span></li>
+        <li><span><b>${esc(appName())}</b> in Hush: the Expenses service, in Hush's catalog and on your Hush Identity Gateway for all users.</span></li>
       </ul>
       ${inHush().state === "ready" ? "" : inHushStatus()}
       <h2>What you'll do</h2>
       <ol class="tasks">
         <li><div><b>Register the agent</b> in Hush, so Hush knows it by its Kubernetes identity.</div></li>
-        <li><div><b>Grant it access to Expenses.</b></div></li>
-        <li><div><b>Try the assistant</b> as one of its users: sign in, connect your Expenses account, then list, add
+        <li><div><b>Grant it access to the Expenses service.</b></div></li>
+        <li><div><b>Try the assistant</b> as one of its users: sign in, connect your account on the Expenses service, then list, add
           and delete expenses, and see what Hush lets through.</div></li>
       </ol>
       <div class="nav-row"><button class="btn primary" type="button" data-step="${stepOf("agent")}">Start: Register the agent</button></div>`;
@@ -498,7 +498,7 @@
       ${result}
       <div class="nav-row">
         ${goTo("welcome", "Back")}
-        <button class="btn${registered() ? " primary" : ""}" type="button" data-step="${stepOf("access")}">Next: Grant access to Expenses</button>
+        <button class="btn${registered() ? " primary" : ""}" type="button" data-step="${stepOf("access")}">Next: Grant access to the Expenses service</button>
       </div>`;
   }
 
@@ -516,12 +516,12 @@
           <b>${esc(agentName())}</b>.</span></div>`;
       } else {
         result = `<div class="result no" role="status"><span>Couldn't read ${esc(appName())}'s assignments.</span>
-          <span class="detail">${esc(a.error || "Expenses isn't in Hush yet.")}</span></div>`;
+          <span class="detail">${esc(a.error || "The Expenses service isn't in Hush yet.")}</span></div>`;
       }
     }
     return `
-      <h1>Grant the agent access to Expenses</h1>
-      <p>Expenses is a small MCP app, standing in for one of your company's apps. Each user signs in to it with their
+      <h1>Grant the agent access to the Expenses service</h1>
+      <p>The Expenses service is a small MCP app, standing in for one of your company's apps. Each user signs in to it with their
         email, and sees only their own expenses.</p>
       ${inHushStatus()}
       <p>By default, Hush gives each tool a policy by what it does. You can leave them as they are:</p>
@@ -531,7 +531,7 @@
           ["submit_expense", "writes", "asks the user first"],
           ["delete_expense", "deletes", "blocked"],
         ].map(([tool, does, policy]) => `<tr><th><code>${tool}</code></th><td>${does}</td><td>${policy}</td></tr>`).join("")}</tbody></table>
-      <p>Expenses is already on for all your users. But an agent acting for a user reaches an app only when the app is
+      <p>The Expenses service is already on for all your users. But an agent acting for a user reaches an app only when the app is
         assigned to the agent too: that's yours to do.</p>
       <ol class="tasks">
         <li><div>In the Hush UI, go to <b>Applications</b> and open <b>${esc(appName())}</b>.</div></li>
@@ -556,16 +556,16 @@
   function tryProblem() {
     if (!me.signed_in) return "";
     if (app.phase === "unavailable") {
-      return `<div class="result no" role="status"><span>The gateway doesn't offer Expenses to the agent, for you.</span>
+      return `<div class="result no" role="status"><span>The gateway doesn't offer the Expenses service to the agent, for you.</span>
         <span>Check that ${esc(appName())} is assigned to the agent.</span></div>
-        <div class="row">${goTo("access", "Go to Grant access to Expenses")}</div>`;
+        <div class="row">${goTo("access", "Go to Grant access to the Expenses service")}</div>`;
     }
     if (app.phase === "refused") {
       return `<div class="result no" role="status"><span>Hush refused the token exchange: the agent may not act for you.</span>
         <span>Check the agent in the Hush registry: is <b>Act for users</b> on, and are you one of its assigned users?</span></div>`;
     }
     if (app.phase === "error") {
-      return `<div class="result no" role="status"><span>The agent couldn't reach Expenses.</span><span class="detail">${esc(app.message)}</span></div>`;
+      return `<div class="result no" role="status"><span>The agent couldn't reach the Expenses service.</span><span class="detail">${esc(app.message)}</span></div>`;
     }
     return "";
   }
@@ -588,7 +588,7 @@
       ${problem}
       <ol class="timeline">
         ${item("signin", 1, "Sign in", trySignIn(), trySignedIn())}
-        ${item("connect", 2, "Connect your Expenses account", tryConnect(), "The gateway keeps your Expenses connection, and calls Expenses with it for you.")}
+        ${item("connect", 2, "Connect the Expenses service", tryConnect(), "The gateway keeps your connection to the Expenses service, and calls it with that connection for you.")}
         ${item("use", 3, "Work on your expenses", tryUse())}
       </ol>
       <div class="nav-row">
@@ -612,32 +612,32 @@
 
   function tryConnect() {
     const e = setup?.expenses || {};
-    if (app.phase !== "connect") return `<p class="status wait">${spinner}<span>The assistant is reaching Expenses through the gateway…</span></p>`;
+    if (app.phase !== "connect") return `<p class="status wait">${spinner}<span>The assistant is reaching the Expenses service through the gateway…</span></p>`;
     return `
-      <p>Expenses has its own accounts. The first time the agent reaches Expenses for you, the gateway asks you to
-        connect your Expenses account, once. It keeps that connection and uses it on your calls: the agent never
+      <p>The Expenses service has its own accounts. The first time the agent reaches it for you, the gateway asks
+        you to connect your account there, once. It keeps that connection and uses it on your calls: the agent never
         sees it.</p>
-      <p>Click <b>Connect Expenses</b> in the assistant. Expenses' sign-in asks for your email${e.access_code ? " and this access code" : ""}:</p>
+      <p>Click <b>Connect the Expenses service</b> in the assistant. Its sign-in asks for your email${e.access_code ? " and this access code" : ""}:</p>
       ${fields([["Email", val(me.email)], ...(e.access_code ? [["Access code", val(e.access_code)]] : [])])}
-      ${e.access_code ? `<p class="aside">Expenses is public, through a Cloudflare quick tunnel. The access code keeps
+      ${e.access_code ? `<p class="aside">The Expenses service is public, through a Cloudflare quick tunnel. The access code keeps
         others from signing in to it.</p>` : ""}`;
   }
 
   const EVENTS = {
-    listed: ["ok", `The assistant asked Expenses for your expenses, through the gateway. <code>list_expenses</code> only
-      reads, so the gateway let it through, and Expenses answered from your own account: see its call below.`],
+    listed: ["ok", `The assistant asked the Expenses service for your expenses, through the gateway. <code>list_expenses</code> only
+      reads, so the gateway let it through, and the Expenses service answered from your own account: see its call below.`],
     consent: ["wait", `The gateway is holding the call: <code>submit_expense</code> writes, so it asks you first.
       Click <b>Review the request</b> in the assistant and approve it. The assistant then adds it again, and this time
-      the token exchange carries your approval. Expenses hasn't seen the call yet.`],
-    added: ["ok", `You approved, and Expenses added the expense to your account: see its call below.`],
-    added_again: ["ok", `Expenses added the expense without asking you again: Hush remembers the approval you gave
+      the token exchange carries your approval. The Expenses service hasn't seen the call yet.`],
+    added: ["ok", `You approved, and the Expenses service added the expense to your account: see its call below.`],
+    added_again: ["ok", `The Expenses service added the expense without asking you again: Hush remembers the approval you gave
       earlier. See its call below.`],
-    added_directly: ["wait", `Expenses added the expense without asking you first: is <code>submit_expense</code> set
+    added_directly: ["wait", `The Expenses service added the expense without asking you first: is <code>submit_expense</code> set
       to ask the user in Hush?`],
-    declined: ["no", `You declined: the call never reached Expenses.`],
+    declined: ["no", `You declined: the call never reached the Expenses service.`],
     blocked: ["ok", `<b>As expected.</b> The gateway blocked the delete: <code>delete_expense</code> deletes, so Hush's policy blocks it.
-      Expenses never got the call: nothing new below.`],
-    deleted: ["wait", `Expenses deleted it: is <code>delete_expense</code> still blocked in Hush?`],
+      The Expenses service never got the call: nothing new below.`],
+    deleted: ["wait", `The Expenses service deleted it: is <code>delete_expense</code> still blocked in Hush?`],
   };
 
   function tryUse() {
@@ -649,7 +649,7 @@
     const event = EVENTS[lastEvent];
     const all = tasks.every(([key]) => done.has(key));
     return `
-      <p>The assistant calls Expenses through the Hush Identity Gateway, with the Hush access token naming you both.
+      <p>The assistant calls the Expenses service through the Hush Identity Gateway, with the Hush access token naming you both.
         The gateway checks each call against the tools' policies. Try each:</p>
       <ul class="checklist">${tasks.map(([key, title, why]) =>
         `<li class="${done.has(key) ? "yes" : ""}"><span class="tick">${done.has(key) ? "✓" : ""}</span>
@@ -670,10 +670,10 @@
         <li>The agent reaches an app only when the app is assigned to it, and open to the user it acts for.</li>
         <li>Every call is checked against the tools' policies. By default, a read goes through, a write waits for you,
           and a delete is blocked.</li>
-        <li>Expenses sees you, in your own account. The gateway keeps your Expenses connection: the agent never sees it.</li>
+        <li>The Expenses service sees you, in your own account. The gateway keeps your connection to it: the agent never sees it.</li>
       </ul>
       <h2>Clean up</h2>
-      <p>Uninstall the tutorial, before your API key expires: it takes Expenses out of Hush too.</p>
+      <p>Uninstall the tutorial, before your API key expires: it takes the Expenses service out of Hush too.</p>
       ${cmd(`helm uninstall ${setup?.release || "<release>"} -n ${namespace}`)}
       <p>Then, in the Hush UI, delete the agent, and the API key unless it has expired.</p>
       <div class="nav-row">${goTo("try", "Back")}</div>`;
@@ -727,19 +727,19 @@
         return `<div class="appbody center"><span class="spin" aria-hidden="true"></span><p>Opening your expenses…</p></div>`;
       case "connect":
         return center(ICONS.plug, `Hi ${esc(firstName())}!`,
-          "To work on your expense reports, I need your Expenses account. You connect it once.",
+          "To work on your expense reports, I need your account on the Expenses service. You connect it once.",
           app.connecting
-            ? `<p class="status wait">${spinner}<span>Waiting for you to finish in Expenses…</span></p>
+            ? `<p class="status wait">${spinner}<span>Waiting for you to finish in the Expenses service…</span></p>
               <button class="abtn ghost small" type="button" data-app="list">Done? Check now</button>`
-            : `<button class="abtn" type="button" data-app="connect"${app.connectUrl ? "" : " disabled"}>Connect Expenses</button>`);
+            : `<button class="abtn" type="button" data-app="connect"${app.connectUrl ? "" : " disabled"}>Connect the Expenses service</button>`);
       case "unavailable":
-        return center(ICONS.lock, "I can't reach Expenses for you",
-          "Your company hasn't given me access to Expenses yet.", retry);
+        return center(ICONS.lock, "I can't reach the Expenses service for you",
+          "Your company hasn't given me access to the Expenses service yet.", retry);
       case "refused":
         return center(ICONS.lock, "I can't work for you",
           "Your company hasn't allowed me to act for you.", retry);
       case "error":
-        return center(ICONS.lock, "Something went wrong", "I couldn't reach Expenses.", `<span class="fine">${esc(app.message)}</span>${retry}`);
+        return center(ICONS.lock, "Something went wrong", "I couldn't reach the Expenses service.", `<span class="fine">${esc(app.message)}</span>${retry}`);
       default:
         return appReady();
     }
@@ -950,7 +950,7 @@
   function renderLog() {
     document.getElementById("log-sub").textContent = me.signed_in ? `calls on ${me.email}'s account, newest first` : "";
     const log = document.getElementById("log");
-    if (!me.signed_in) { log.innerHTML = `<p class="empty">Sign in to the assistant to see the calls Expenses gets for you.</p>`; return; }
+    if (!me.signed_in) { log.innerHTML = `<p class="empty">Sign in to the assistant to see the calls the Expenses service gets for you.</p>`; return; }
     if (!calls || !calls.length) { log.innerHTML = `<p class="empty">No calls for ${esc(me.email)} yet.</p>`; return; }
     const key = (c) => `${c.time}|${c.tool}|${c.result}`;
     const fresh = seenCalls ? (c) => !seenCalls.has(key(c)) : () => false;
@@ -1054,7 +1054,7 @@
     if (event.target.id === "app-menu") app.menuOpen = event.target.open;
   }, true);
 
-  // Back from connecting Expenses in the other tab: look at once.
+  // Back from connecting the Expenses service in the other tab: look at once.
   window.addEventListener("focus", () => { if (app.connecting) appList({ quiet: true }); });
 
   async function loadSetup() {
@@ -1085,7 +1085,7 @@
     }
     refreshCalls();
     setInterval(() => { if (!document.hidden && STEPS[step].key === "try") refreshCalls(); }, LOG_POLL_MS);
-    // Hush gets Expenses in the background: show it once it does.
+    // Hush gets the Expenses service in the background: show it once it does.
     setInterval(async () => {
       if (document.hidden || !["welcome", "access"].includes(STEPS[step].key) || inHush().state === "ready") return;
       await loadSetup();

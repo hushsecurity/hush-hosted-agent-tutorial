@@ -219,7 +219,7 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
             # One expense comes back as one text item: itself, not a list.
             result.data = [result.data]
         elif result.kind == "done" and not isinstance(result.data, list):
-            result = Outcome("error", f"Expenses answered with something other than a list: {str(result.data)[:200]}")
+            result = Outcome("error", f"The Expenses service answered with something other than a list: {str(result.data)[:200]}")
         return outcome(result)
 
     async def submit_expense(request: Request) -> JSONResponse:
