@@ -24,9 +24,11 @@ app it works on, in their own namespace.
 - A Kubernetes cluster whose service account token issuer is reachable from
   the internet, as on EKS, GKE or AKS. Hush checks the agent's token there.
 - Helm 3 and kubectl
-- A Hush API key with only the Applications Read and Applications Write
-  scopes, expiring in a few hours. The tutorial uses it to put the Expenses
-  service in Hush, and to take it out when you uninstall.
+- A Hush API key with only the Applications Read, Applications Write, Agents
+  Read and Agents Write scopes, expiring in a few hours. The tutorial uses it
+  to put the Expenses service in Hush, to start over, and to take it out when
+  you uninstall. The Agents scopes reach every agent in your org; the tutorial
+  unregisters only the one signing in as its own service account.
 
 ## Run it
 
@@ -71,6 +73,12 @@ agent, run the port-forward again.
 3. **Try the assistant**: sign in, connect the Expenses service, then list,
    add and delete expenses, and see what Hush lets through.
 4. **Recap**, and how to clean up.
+
+**Start over**, at the top of the page, puts Hush back as installed so you can
+go through the steps again: it unregisters the agent, makes Expenses
+(tutorial) anew on the gateway with no assignments and the default tool
+policies, resets the Expenses service, and signs everyone out. Approvals you
+gave stay until they expire.
 
 ## What it installs
 

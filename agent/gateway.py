@@ -61,7 +61,7 @@ class Outcome:
                      at `url` when there is one
       blocked        the gateway's policy blocks the call
       not_assigned   Hush refused the exchange: the agent may not act for the user
-      signed_out     the user's sign-in is gone (the agent restarted, or it expired)
+      signed_out     the user's sign-in is gone (the agent restarted, the tutorial started over, or it expired)
       not_available  Expenses isn't on the gateway for this user and agent
       refused        Hush refused something else
       error          anything else

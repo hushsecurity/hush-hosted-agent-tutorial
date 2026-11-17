@@ -133,3 +133,19 @@ async def test_a_registered_client_is_known_after_a_restart_with_the_same_key():
     assert await before.get_client(f"{registration}x.{signature}") is None
     assert await before.get_client("not-a-client") is None
     assert await before.get_client("a.é") is None
+
+
+async def test_a_reset_signs_everyone_out_and_brings_back_the_samples(expenses):
+    http, store = expenses
+    token = await sign_in(http, "dana@example.com")
+    samples = len(store.expenses("dana@example.com"))
+    store.submit("dana@example.com", "Hotel", 210, "Lodging")
+    store.record("dana@example.com", "submit_expense", {}, "submitted")
+    signed = {"Authorization": f"Bearer {token}", "Accept": "application/json, text/event-stream"}
+    assert (await http.post("/mcp", headers=signed, json={})).status_code != 401
+
+    store.reset()
+
+    assert (await http.post("/mcp", headers=signed, json={})).status_code == 401
+    assert len(store.expenses("dana@example.com")) == samples and not store.calls
+

@@ -13,7 +13,7 @@ import logging
 import math
 import pathlib
 import secrets
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -52,10 +52,10 @@ class Sessions(BaseHTTPMiddleware):
     """Finds the browser's session by its cookie. A browser without one gets a
     new session, kept (and the cookie set) only once it starts signing in."""
 
-    def __init__(self, app, secure: bool):
+    def __init__(self, app, secure: bool, sessions: dict[str, Session]):
         super().__init__(app)
         self.secure = secure
-        self.sessions: dict[str, Session] = {}
+        self.sessions = sessions
 
     async def dispatch(self, request: Request, call_next):
         session_id = request.cookies.get(SESSION_COOKIE)
@@ -130,8 +130,25 @@ def expense_id_of(body: dict) -> int:
     raise BadInput("expense_id: a whole number is needed")
 
 
+def from_the_page(request: Request, agent_url: str) -> bool:
+    """Whether a request came from the page itself, as served at agent_url:
+    JSON, addressed to that host (not a name some other site points here), and
+    sent from that origin. A page elsewhere can do none of these."""
+    page = urlsplit(agent_url)
+    hosts = {page.netloc.lower()}
+    if page.hostname == "localhost":
+        port = f":{page.port}" if page.port else ""
+        hosts |= {f"127.0.0.1{port}", f"[::1]{port}"}
+    host = request.headers.get("host", "").lower()
+    origin = request.headers.get("origin")
+    origin = origin.lower() if origin is not None else None
+    json_sent = request.headers.get("content-type", "").split(";")[0].strip() == "application/json"
+    return json_sent and host in hosts and (origin is None or origin == f"{page.scheme}://{host}")
+
+
 def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: ExpensesSide,
-           release: str | None, chart_version: str | None) -> list[Route]:
+           release: str | None, chart_version: str | None, agent_url: str,
+           sessions: dict[str, Session]) -> list[Route]:
     async def index(request: Request) -> HTMLResponse:
         return HTMLResponse(PAGE, headers={"Cache-Control": "no-store"})
 
@@ -199,6 +216,36 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
         request.state.session.activity = Activity()
         return JSONResponse({"ok": True})
 
+    async def still_registered(step: dict | None) -> dict | None:
+        """Setup's word that the agent is unregistered, checked with Hush: an
+        agent registered in a way setup doesn't recognize still signs in."""
+        if not step or step.get("ok") is False:
+            return step
+        try:
+            registration = await identity.registration()
+        except Exception:
+            return step
+        return {"ok": False, "detail": f"still registered as {registration['name'] or registration['id']}: "
+                                       "remove it in the Hush UI"}
+
+    async def start_over(request: Request) -> JSONResponse:
+        """Puts the tutorial back to its start, for the reader to do it again:
+        Hush as installed, the Expenses service as new, and everyone signed
+        out of the assistant. Every step runs; each reports how it went."""
+        if not from_the_page(request, agent_url):
+            return JSONResponse({"ok": False, "message": "start over from the tutorial's page"}, status_code=403)
+        hush = await expenses_side.start_over(workload(identity).get("issuer"))
+        steps = {
+            "agent": await still_registered(hush.get("agent")),
+            "app": hush.get("app"),
+            "expenses": await expenses_side.reset(),
+            "assistant": {"ok": True, "detail": "everyone is signed out"},
+        }
+        sessions.clear()
+        response = JSONResponse({"steps": steps})
+        response.delete_cookie(SESSION_COOKIE)
+        return response
+
     async def activity(request: Request) -> JSONResponse:
         """What the agent did for this browser's user, newest first, each call
         that went through with what the Expenses service recorded of it."""
@@ -248,6 +295,7 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
         Route("/api/me", me),
         Route("/api/signout", sign_out, methods=["POST"]),
         Route("/api/activity", activity),
+        Route("/api/start-over", start_over, methods=["POST"]),
         Route("/api/expenses/list", list_expenses, methods=["POST"]),
         Route("/api/expenses/submit", submit_expense, methods=["POST"]),
         Route("/api/expenses/delete", delete_expense, methods=["POST"]),
@@ -267,6 +315,7 @@ def build(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str,
     tutorial's Helm release and chart version, for the page's commands."""
     agent_url = agent_url.rstrip("/")
     expenses_side = expenses_side or ExpensesSide(identity.http, None)
-    return Starlette(routes=routes(identity, expenses, expenses_side, release, chart_version),
-                     middleware=[Middleware(Sessions, secure=agent_url.startswith("https://"))],
+    sessions: dict[str, Session] = {}
+    return Starlette(routes=routes(identity, expenses, expenses_side, release, chart_version, agent_url, sessions),
+                     middleware=[Middleware(Sessions, secure=agent_url.startswith("https://"), sessions=sessions)],
                      exception_handlers={BadInput: bad_input})

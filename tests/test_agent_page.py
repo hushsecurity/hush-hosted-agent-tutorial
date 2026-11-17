@@ -41,12 +41,13 @@ AGENT_RULE = {"all_of": [{"any_of": [{"source": "agent", "property": "id", "op":
 
 
 def page_for(hush: FakeHush, tmp_path, store: Store, internal_url: str | None = "http://cluster/expenses",
-             setup_url: str | None = "http://cluster/setup", assignments: list | None = None):
+             setup_url: str | None = "http://cluster/setup", assignments: list | None = None,
+             setup: Setup | None = None):
     """The agent's page, with Expenses' internal port and setup's status
     behind one address."""
     identity = identity_for(hush, tmp_path)
     cluster = Starlette(routes=[Mount("/expenses", internal.build(store, EXPENSES_URL, "code-1")),
-                                Mount("/setup", status_app(setup_with(assignments or [])))])
+                                Mount("/setup", status_app(setup or setup_with(assignments or [])))])
     side = ExpensesSide(httpx2.AsyncClient(transport=httpx2.ASGITransport(app=cluster)), internal_url, setup_url)
     app = web.build(identity, ExpensesThroughGateway(identity, "custom-expenses-tutorial"), AGENT_URL, side,
                     release="tutorial", chart_version="0.1.0")
@@ -155,3 +156,84 @@ def test_another_users_call_at_the_same_time_hides_the_account():
            {"tool": "list_expenses", "time": at(11), "account": "dana@example.com"}]
     assert paired(events, log) == [None]
 
+
+def setup_in_use(fake: FakeHushAPI) -> Setup:
+    """Setup once the reader has done the steps: the agent registered and assigned."""
+    fake.add_agent(AGENT_ID, (CLUSTER_ISSUER, SERVICE_ACCOUNT))
+    setup = Setup(fake.client(), agent_subject=SERVICE_ACCOUNT)
+    setup.status = dict(IN_HUSH)
+    setup.api = hush_api.HushAPI(fake.client(), API, *KEY)
+    setup.expenses = hush_api.Expenses("expenses-tutorial", "dep-1", EXPENSES_URL)
+    setup.app_id = fake.add_app("custom-expenses-tutorial", "dep-1", assignments=[AGENT_RULE])["id"]
+    return setup
+
+
+async def test_start_over_puts_hush_and_expenses_back_and_signs_everyone_out(tmp_path):
+    store, fake = Store(), FakeHushAPI()
+    store.record("dana@example.com", "list_expenses", {}, "3 expenses")
+    hush = FakeHush(registered=lambda: AGENT_ID in fake.agents)
+    async with page_for(hush, tmp_path, store, setup=setup_in_use(fake)) as client:
+        await sign_in_with(client)
+        steps = (await client.post("/api/start-over", json={})).json()["steps"]
+        signed_in = (await client.get("/api/me")).json()["signed_in"]
+
+    assert all(step["ok"] for step in steps.values()), steps
+    assert not signed_in
+    assert AGENT_ID not in fake.agents
+    assert [app["assignments"] for app in fake.apps.values()] == [[]]
+    assert not store.calls
+
+
+async def test_start_over_tells_of_an_agent_still_registered(tmp_path):
+    fake = FakeHushAPI()
+    setup = setup_in_use(fake)
+    # Registered for the whole namespace: setup doesn't take it for the tutorial's own.
+    fake.agents[AGENT_ID]["credentials"][0].update(subject="system:serviceaccount:tutorial:", subject_match="prefix")
+    async with page_for(FakeHush(), tmp_path, Store(), setup=setup) as client:
+        steps = (await client.post("/api/start-over", json={})).json()["steps"]
+    assert steps["agent"] == {"ok": False, "detail": f"still registered as {AGENT_NAME}: remove it in the Hush UI"}
+    assert AGENT_ID in fake.agents and steps["app"]["ok"]
+
+
+@pytest.mark.parametrize("headers, json_body", [
+    ({}, False),
+    ({"origin": "https://elsewhere.example.com"}, True),
+    ({"host": "rebound.example.com:8080", "origin": "http://rebound.example.com:8080"}, True),
+])
+async def test_start_over_answers_only_the_page(tmp_path, headers, json_body):
+    store, fake = Store(), FakeHushAPI()
+    store.record("dana@example.com", "list_expenses", {}, "3 expenses")
+    async with page_for(FakeHush(), tmp_path, store, setup=setup_in_use(fake)) as client:
+        sent = {"json": {}} if json_body else {"content": "x", "headers": {"content-type": "text/plain", **headers}}
+        if json_body:
+            sent["headers"] = headers
+        resp = await client.post("/api/start-over", **sent)
+    assert resp.status_code == 403
+    assert AGENT_ID in fake.agents and store.calls
+
+
+async def test_start_over_answers_the_page_by_its_loopback_address(tmp_path):
+    async with page_for(FakeHush(), tmp_path, Store(), setup=setup_in_use(FakeHushAPI())) as client:
+        resp = await client.post("/api/start-over", json={},
+                                 headers={"host": "127.0.0.1:8080", "origin": "http://127.0.0.1:8080"})
+    assert resp.status_code == 200
+
+
+
+async def test_start_over_answers_the_page_whatever_the_case_of_its_address(tmp_path):
+    identity = identity_for(FakeHush(), tmp_path)
+    app = web.build(identity, ExpensesThroughGateway(identity, "custom-expenses-tutorial"), "http://LocalHost:8080",
+                    ExpensesSide(httpx2.AsyncClient(), None, None))
+    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://localhost:8080") as client:
+        resp = await client.post("/api/start-over", json={}, headers={"origin": "http://LOCALHOST:8080"})
+    assert resp.status_code == 200
+
+
+async def test_start_over_leaves_an_agent_without_authentication_with_a_note(tmp_path):
+    fake = FakeHushAPI()
+    setup = setup_in_use(fake)
+    fake.agents[AGENT_ID].update(credentials=[], name=AGENT_NAME)
+    async with page_for(FakeHush(registered=False), tmp_path, Store(), setup=setup) as client:
+        steps = (await client.post("/api/start-over", json={})).json()["steps"]
+    assert steps["agent"]["ok"] is None and steps["agent"]["detail"].startswith(f"found {AGENT_NAME} with no")
+    assert AGENT_ID in fake.agents

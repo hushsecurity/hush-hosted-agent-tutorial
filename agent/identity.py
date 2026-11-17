@@ -96,8 +96,8 @@ class Session:
     user: UserTokens | None = None
     pending: dict[str, str] = dataclasses.field(default_factory=dict)
     refreshing: asyncio.Lock = dataclasses.field(default_factory=asyncio.Lock)
-    # The browser named a session the agent doesn't have: it restarted, and
-    # keeps sessions in memory only.
+    # The browser named a session the agent doesn't have: it restarted (it
+    # keeps sessions in memory only), or the tutorial started over.
     forgotten: bool = False
     # Replaced, never cleared, with each sign-in and sign-out: a call still
     # running then records into the activity it began in.
@@ -192,7 +192,7 @@ class Identity:
             user = session.user
             if user is None:
                 raise HushRefused("sign-in", 401, "login_required",
-                                  "the agent restarted: sign in again" if session.forgotten
+                                  "your session ended: sign in again" if session.forgotten
                                   else "sign in first")
             if time.time() <= user.expires_at - REFRESH_MARGIN:
                 return user.access

@@ -18,10 +18,11 @@ gateway:
   # and take authorization_servers[0].
   issuer: ""
 
-# A Hush API key, for the tutorial to put Expenses in Hush and take it out on
-# uninstall. Create one with the Applications Read (applications:read) and
-# Applications Write (applications:write) scopes only, expiring in a few hours:
-# long enough to uninstall with, as uninstalling uses it too. Required.
+# A Hush API key, for the tutorial to put Expenses in Hush, to start over, and
+# to take Expenses out on uninstall. Create one with the Applications Read
+# (applications:read), Applications Write (applications:write), Agents Read
+# (agents:read) and Agents Write (agents:write) scopes only, expiring in a few
+# hours: long enough to uninstall with, as uninstalling uses it too. Required.
 hush:
   apiKey:
     # A Secret you created, with keys `id` and `secret`:

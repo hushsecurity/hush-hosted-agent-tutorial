@@ -248,3 +248,147 @@ async def test_hush_learns_the_address_only_once_expenses_answers(monkeypatch):
             await setup.put()
     assert fake.calls == []
     assert setup.status == {"state": "failed", "error": f"Expenses doesn't answer at {SERVICE}"}
+
+
+CLUSTER = "https://oidc.cluster.example.com/id/ABC"
+ASSISTANT = "system:serviceaccount:tutorial:expenses-assistant"
+
+
+def ready_setup(fake: FakeHushAPI, app_id: str) -> Setup:
+    setup = Setup(fake.client(), agent_subject=ASSISTANT)
+    setup.status["state"] = "ready"
+    setup.api, setup.expenses, setup.app_id = api_for(fake), EXPENSES, app_id
+    return setup
+
+
+AGENT_RULE = {"all_of": [{"any_of": [{"source": "agent", "property": "id", "op": "eq", "value": "agt-1"}]}]}
+
+
+async def test_start_over_unregisters_the_agent_and_makes_the_app_anew():
+    fake = FakeHushAPI()
+    fake.add_agent("agt-1", (CLUSTER, ASSISTANT), name="expenses-assistant")
+    first = await hush.put(api_for(fake), EXPENSES)
+    fake.apps[first["id"]]["assignments"] = [AGENT_RULE]
+    setup = ready_setup(fake, first["id"])
+
+    result = await setup.start_over(CLUSTER)
+
+    assert result["agent"] == {"ok": True, "detail": "unregistered expenses-assistant"} and result["app"]["ok"]
+    [app] = fake.apps.values()
+    assert (app["id"] != first["id"], app["assignments"], app["assign_all"]) == (True, [], True)
+    assert setup.app_id == app["id"] and not fake.agents
+    assert "expenses-tutorial" in fake.custom
+    assert (await setup.start_over(CLUSTER))["agent"] == {"ok": True, "detail": "it wasn't registered"}
+
+
+async def test_start_over_unregisters_only_the_tutorials_agent():
+    fake = FakeHushAPI()
+    fake.add_agent("agt-1", (CLUSTER, ASSISTANT))
+    fake.add_agent("agt-2", (CLUSTER, "system:serviceaccount:tutorial:someone-else"))
+    fake.add_agent("agt-3", ("https://oidc.other.example.com", ASSISTANT))
+    fake.add_agent("agt-4", (CLUSTER, ASSISTANT), (CLUSTER, "system:serviceaccount:prod:billing"), name="billing")
+    fake.add_agent("agt-5", (CLUSTER + "/", ASSISTANT))
+    first = await hush.put(api_for(fake), EXPENSES)
+
+    result = await ready_setup(fake, first["id"]).start_over(CLUSTER)
+
+    assert sorted(fake.agents) == ["agt-2", "agt-3", "agt-4"]
+    assert result["agent"]["ok"] is False and "left billing alone" in result["agent"]["detail"]
+    assert result["app"]["ok"]
+
+
+async def test_start_over_tells_of_an_agent_named_as_the_page_says_but_without_authentication():
+    fake = FakeHushAPI()
+    fake.add_agent("agt-1", name="expenses-assistant")
+    fake.add_agent("agt-2", name="half-done")
+    first = await hush.put(api_for(fake), EXPENSES)
+
+    result = await ready_setup(fake, first["id"]).start_over(CLUSTER)
+
+    assert result["agent"] == {"ok": None, "detail": "found expenses-assistant with no authentication, so it was "
+                                                     "left in place. Remove it in the Hush UI if you'd like to "
+                                                     "register it from scratch"}
+    assert sorted(fake.agents) == ["agt-1", "agt-2"] and result["app"]["ok"]
+
+
+async def test_start_over_unregisters_the_agent_and_tells_of_another_without_authentication():
+    fake = FakeHushAPI()
+    fake.add_agent("agt-1", (CLUSTER, ASSISTANT), name="assistant")
+    fake.add_agent("agt-2", name="expenses-assistant")
+    first = await hush.put(api_for(fake), EXPENSES)
+    result = await ready_setup(fake, first["id"]).start_over(CLUSTER)
+    assert result["agent"]["ok"] is None
+    assert result["agent"]["detail"].startswith("unregistered assistant; found expenses-assistant")
+    assert list(fake.agents) == ["agt-2"]
+
+
+@pytest.mark.parametrize("issuer, subject", [(None, ASSISTANT), (CLUSTER, None)])
+async def test_start_over_without_knowing_the_agent_unregisters_nothing(issuer, subject):
+    fake = FakeHushAPI()
+    fake.add_agent("agt-1", (CLUSTER, ASSISTANT))
+    first = await hush.put(api_for(fake), EXPENSES)
+    setup = ready_setup(fake, first["id"])
+    setup.agent_subject = subject
+
+    result = await setup.start_over(issuer)
+
+    assert result["agent"] == {"ok": False, "detail": "couldn't tell the agent's Kubernetes identity"}
+    assert result["app"]["ok"] and "agt-1" in fake.agents
+
+
+async def test_start_over_without_a_registered_agent_still_makes_the_app_anew():
+    fake = FakeHushAPI()
+    first = await hush.put(api_for(fake), EXPENSES)
+    result = await ready_setup(fake, first["id"]).start_over(CLUSTER)
+    assert result["agent"] == {"ok": True, "detail": "it wasn't registered"} and result["app"]["ok"]
+
+
+async def test_start_over_goes_on_when_unregistering_fails():
+    fake = FakeHushAPI()
+    fake.add_agent("agt-1", (CLUSTER, ASSISTANT))
+    fake.broken_agents.add("agt-1")
+    first = await hush.put(api_for(fake), EXPENSES)
+    result = await ready_setup(fake, first["id"]).start_over(CLUSTER)
+    assert not result["agent"]["ok"] and "500" in result["agent"]["detail"]
+    assert result["app"]["ok"] and first["id"] not in fake.apps
+
+
+async def test_start_over_leaves_an_app_the_tutorial_did_not_make():
+    fake = FakeHushAPI()
+    first = await hush.put(api_for(fake), EXPENSES)
+    fake.custom["expenses-tutorial"]["description"] = "Someone's own"
+    setup = ready_setup(fake, first["id"])
+    result = await setup.start_over(CLUSTER)
+    assert not result["app"]["ok"] and first["id"] in fake.apps
+    assert (setup.app_id, setup.status["state"], setup.putting_back) == (first["id"], "ready", None)
+
+
+async def test_a_half_made_app_is_put_back(monkeypatch):
+    monkeypatch.setattr(setup_main, "RETRY_SECONDS", 0)
+    fake = FakeHushAPI()
+    failing = {"left": 0}
+    real_handle = fake.handle
+
+    def handle(request):
+        if request.method == "POST" and request.url.path.startswith("/v1/applications/mcp/") and failing["left"]:
+            failing["left"] -= 1
+            return httpx2.Response(503, json={"detail": "trouble"})
+        return real_handle(request)
+    fake.handle = handle
+    first = await hush.put(api_for(fake), EXPENSES)
+    setup = ready_setup(fake, first["id"])
+    failing["left"] = 1
+
+    result = await setup.start_over(CLUSTER)
+
+    assert not result["app"]["ok"] and "once Expenses is back" in result["app"]["detail"]
+    assert setup.status["state"] == "failed" and setup.app_id is None and not fake.apps
+    await setup.putting_back
+    [app] = fake.apps.values()
+    assert (setup.status["state"], setup.app_id) == ("ready", app["id"])
+
+
+async def test_start_over_waits_until_expenses_is_in_hush():
+    result = await Setup(FakeHushAPI().client(), agent_subject=ASSISTANT).start_over(CLUSTER)
+    assert not result["agent"]["ok"] and not result["app"]["ok"]
+

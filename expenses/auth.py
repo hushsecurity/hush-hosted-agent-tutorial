@@ -55,6 +55,14 @@ class Provider:
         self.access_tokens: dict[str, AccessToken] = {}
         self.refresh_tokens: dict[str, RefreshToken] = {}
 
+    def forget(self) -> None:
+        """Signs everyone out: every token it issued stops working. Registered
+        clients stay, as their ids carry their own registration."""
+        self.sign_ins.clear()
+        self.codes.clear()
+        self.access_tokens.clear()
+        self.refresh_tokens.clear()
+
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         registration, _, signature = client_id.partition(".")
         if not hmac.compare_digest(signature.encode(), self._sign("client", registration).encode()):

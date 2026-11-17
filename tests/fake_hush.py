@@ -4,6 +4,7 @@ agent's side of the sign-in and the exchange."""
 import base64
 import json
 import time
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from starlette.applications import Starlette
@@ -32,7 +33,8 @@ SERVICE_ACCOUNT_TOKEN = jwt({"iss": CLUSTER_ISSUER, "sub": SERVICE_ACCOUNT, "aud
 
 
 class FakeHush:
-    def __init__(self, user_email: str = "dana@example.com", user_ttl: int = 300, registered: bool = True):
+    def __init__(self, user_email: str = "dana@example.com", user_ttl: int = 300,
+                 registered: bool | Callable[[], bool] = True):
         self.registered = registered
         self.user_email = user_email
         self.user_ttl = user_ttl
@@ -59,7 +61,8 @@ class FakeHush:
             user = {"sub": "user-1", "email": self.user_email, "exp": int(time.time()) + self.user_ttl}
             grant = form["grant_type"]
             if grant == "client_credentials":
-                if not self.registered or form.get("client_assertion") != SERVICE_ACCOUNT_TOKEN:
+                registered = self.registered() if callable(self.registered) else self.registered
+                if not registered or form.get("client_assertion") != SERVICE_ACCOUNT_TOKEN:
                     return JSONResponse({"error": "invalid_client", "error_description": "invalid assertion"}, status_code=401)
                 return JSONResponse({"access_token": jwt({"sub": AGENT_ID, "agent_id": AGENT_ID, "agent_name": AGENT_NAME}),
                                      "expires_in": self.user_ttl})

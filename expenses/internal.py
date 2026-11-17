@@ -1,4 +1,5 @@
-"""What Expenses saw, and where it is, for the tutorial page to show.
+"""What Expenses saw, and where it is, for the tutorial page to show; and a
+reset, for starting the tutorial over.
 
 Served on a port of its own that stays inside the cluster, never on the
 app's public address.
@@ -25,4 +26,9 @@ def build(store: Store, public_url: str, access_code: str | None = None) -> Star
     async def healthz(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True})
 
-    return Starlette(routes=[Route("/calls", calls), Route("/about", about), Route("/healthz", healthz)])
+    async def reset(request: Request) -> JSONResponse:
+        store.reset()
+        return JSONResponse({"ok": True})
+
+    return Starlette(routes=[Route("/calls", calls), Route("/about", about), Route("/healthz", healthz),
+                             Route("/reset", reset, methods=["POST"])])

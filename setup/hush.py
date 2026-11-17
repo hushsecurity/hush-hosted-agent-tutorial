@@ -7,6 +7,7 @@ its type, as it would from Detect tools in the Hush UI.
 
 import dataclasses
 from typing import Any
+from urllib.parse import quote
 
 import httpx2
 
@@ -143,6 +144,49 @@ async def remove(api: HushAPI, expenses: Expenses) -> None:
     if app is not None:
         await api.request("DELETE", f"/v1/applications/{app['id']}")
     await api.request("DELETE", f"/v1/applications/custom/{expenses.name}")
+
+
+async def recreate(api: HushAPI, expenses: Expenses) -> dict:
+    """Deletes the gateway's application for Expenses and creates it again,
+    keeping the catalog entry: it comes back with no assignments and the
+    org's default tool policies, as the tutorial installed it. Returns the
+    new application. Only when the tutorial made it."""
+    existing = await catalog_entry(api, expenses)
+    if existing is not None and existing.get("description") != MARK:
+        raise NotOurs(expenses.name)
+    app = await application(api, expenses)
+    if app is not None:
+        await api.request("DELETE", f"/v1/applications/{app['id']}")
+    return await put(api, expenses)
+
+
+def signs_in_as(credential: dict, issuer: str, subject: str) -> bool:
+    """Whether the credential is exactly this workload: from its issuer, with
+    its subject, not a prefix of it."""
+    return ((credential.get("issuer") or "").rstrip("/") == issuer.rstrip("/")
+            and credential.get("subject") == subject and credential.get("subject_match", "exact") == "exact")
+
+
+async def service_agents(api: HushAPI) -> list[dict]:
+    found, cursor = [], None
+    while True:
+        params = {"subject_type": "service", **({"cursor": cursor} if cursor else {})}
+        page = await api.request("GET", "/v1/agents", params=params)
+        found += page.get("items", [])
+        cursor = page.get("next_page")
+        if not cursor:
+            return found
+
+
+async def delete_agent(api: HushAPI, agent_id: str) -> bool:
+    """Unregisters the agent: False when Hush no longer had it."""
+    try:
+        await api.request("DELETE", f"/v1/agents/{quote(agent_id, safe='')}")
+    except HushAPIError as e:
+        if e.status == 404:
+            return False
+        raise
+    return True
 
 
 async def assigned_to(api: HushAPI, app_id: str, agent_id: str) -> bool:

@@ -8,6 +8,7 @@ import dataclasses
 import datetime
 import itertools
 import logging
+from collections.abc import Callable
 
 log = logging.getLogger("expenses")
 
@@ -41,6 +42,16 @@ class Store:
         self._accounts: dict[str, list[Expense]] = {}
         self._ids = itertools.count(1001)
         self.calls: collections.deque[Call] = collections.deque(maxlen=max_calls)
+        # What else forgets everything with the store, such as sign-ins.
+        self.on_reset: list[Callable[[], None]] = []
+
+    def reset(self) -> None:
+        """Back to how Expenses started: every account gets the samples
+        again, the log of calls is empty, and nobody is signed in."""
+        self._accounts.clear()
+        self.calls.clear()
+        for forget in self.on_reset:
+            forget()
 
     def expenses(self, account: str) -> list[Expense]:
         """The account's expenses. A new account starts with a few samples."""

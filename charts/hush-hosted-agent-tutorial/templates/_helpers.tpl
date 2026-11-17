@@ -118,7 +118,7 @@ capabilities:
 {{- end -}}
 {{- end -}}
 {{- if not (or .Values.hush.apiKey.existingSecret (and .Values.hush.apiKey.id .Values.hush.apiKey.secret)) -}}
-{{- fail "Set hush.apiKey.id and hush.apiKey.secret, or hush.apiKey.existingSecret: a Hush API key with the Applications Read and Applications Write scopes." -}}
+{{- fail "Set hush.apiKey.id and hush.apiKey.secret, or hush.apiKey.existingSecret: a Hush API key with the Applications Read, Applications Write, Agents Read and Agents Write scopes." -}}
 {{- end -}}
 {{- if and .Values.gateway.issuer (not (regexMatch "/v1/deployments/[^/]+/agents$" .Values.gateway.issuer)) -}}
 {{- fail (printf "gateway.issuer must be the gateway's issuer, ending /v1/deployments/<deployment>/agents (got %s)." .Values.gateway.issuer) -}}

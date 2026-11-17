@@ -49,6 +49,8 @@ spec:
             {{- include "tutorial.expensesAddressEnv" . | nindent 12 }}
             - name: EXPENSES_SERVICE
               value: {{ printf "http://%s:%v" (include "tutorial.componentName" (list . "expenses")) .Values.expenses.port | quote }}
+            - name: AGENT_SUBJECT
+              value: {{ printf "system:serviceaccount:%s:%s" .Release.Namespace .Values.agent.serviceAccount | quote }}
             - name: SETUP_PORT
               value: {{ .Values.setup.port | quote }}
           ports:

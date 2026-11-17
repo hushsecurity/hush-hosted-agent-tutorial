@@ -31,6 +31,7 @@ def build(store: Store, base_url: str, access_code: str | None = None, client_ke
     it too. With `client_key`, clients stay registered across restarts."""
     base_url = base_url.rstrip("/")
     provider = auth.Provider(base_url, client_key)
+    store.on_reset.append(provider.forget)
     mcp = MCPServer(
         "Expenses",
         instructions="Your expense reports: list, submit and delete expenses.",

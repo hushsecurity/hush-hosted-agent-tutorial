@@ -53,6 +53,30 @@ class ExpensesSide:
         return await self._get(self.setup_url, f"/assigned/{quote(agent_id, safe='')}",
                                {"assigned": None, "error": "the tutorial's setup is unreachable"})
 
+    async def start_over(self, issuer: str | None) -> dict:
+        """Has setup put Hush back as installed: how each step went. Setup
+        finds the agent by its service account, from the agent's issuer."""
+        unreachable = {"ok": False, "detail": "the tutorial's setup is unreachable"}
+        # A dozen calls to Hush in a row, answered only once all are done.
+        return await self._post(self.setup_url, "/start-over", {"issuer": issuer},
+                                {"agent": unreachable, "app": unreachable}, timeout=120)
+
+    async def reset(self) -> dict:
+        """Has the Expenses service start as new."""
+        done = await self._post(self.internal_url, "/reset", {}, {"ok": False})
+        return ({"ok": True, "detail": "the sample expenses are back, and nobody is signed in to it"}
+                if done.get("ok") else {"ok": False, "detail": "the Expenses service is unreachable"})
+
+    async def _post(self, base: str | None, path: str, body: dict, default, timeout: float | None = None):
+        if not base:
+            return default
+        try:
+            extra = {"timeout": timeout} if timeout else {}
+            return (await self.http.post(f"{base}{path}", json=body, **extra)).raise_for_status().json()
+        except (httpx2.HTTPError, ValueError) as e:
+            log.warning("posting to %s%s failed: %s", base, path, e)
+            return default
+
     async def _get(self, base: str | None, path: str, default):
         if not base:
             return default
