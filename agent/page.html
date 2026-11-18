@@ -309,6 +309,7 @@
     { key: "access", title: "Grant access" },
     { key: "try", title: "Try the assistant" },
     { key: "killswitch", title: "Kill switch", optional: true },
+    { key: "rules", title: "Who it works for", optional: true },
     { key: "recap", title: "Recap" },
   ];
   const STEP_KEY = "hush-hosted-agent-tutorial-step";
@@ -323,7 +324,7 @@
   const CATEGORIES = ["Travel", "Lodging", "Meals", "Office", "Other"];
   const TRY_TASKS = ["try-list", "try-submit", "try-delete"];
   // Steps that show the assistant beside the guide.
-  const APP_STEPS = ["try", "killswitch"];
+  const APP_STEPS = ["try", "killswitch", "rules"];
   // The namespace the README installs into, for the tutorial alone: the
   // page offers to delete no other.
   const OWN_NAMESPACE = "hush-hosted-agent-tutorial";
@@ -525,7 +526,7 @@
         <li><div>Grant it access to the Expenses service.</div></li>
         <li><div>Try the assistant as one of its users.</div></li>
       </ol>
-      <p class="note">Then, if you like, an optional step: switch the agent off, and back on.</p>
+      <p class="note">Then, if you like, two optional steps: switch the agent off, and choose who it works for.</p>
       <div class="nav-row"><button class="btn primary" type="button" data-step="${stepOf("agent")}">Start</button></div>`;
   }
 
@@ -747,8 +748,8 @@
       ${consentAsked ? `<div class="result wait"><span>Adding needs your OK. Click <b>Review the request</b> in the
         assistant and approve it. The assistant then adds it again.</span>
         <span>If Hush asks for how long, choose <b>10 minutes</b>. Until your approval expires, Hush won't ask again.</span></div>` : ""}
-      ${next ? "" : `<div class="result ok"><span>That's the whole flow. Next, a recap, or first an optional step.</span>
-        <div class="row">${goTo("killswitch", "Kill switch")}</div></div>`}`;
+      ${next ? "" : `<div class="result ok"><span>That's the whole flow. Next, a recap, or first two optional steps.</span>
+        <div class="row">${goTo("killswitch", "Kill switch")} ${goTo("rules", "Who it works for")}</div></div>`}`;
   }
 
   function storyRecap() {
@@ -764,6 +765,7 @@
         <li><span><b>Access control:</b> it reached the Expenses service only after you assigned it.</span></li>
         <li><span><b>Guardrails:</b> listing went through, adding waited for you, deleting was blocked.</span></li>
         <li><span><b>Kill switch:</b> one switch stops the agent at once, for every user, on every app.</span></li>
+        <li><span><b>Who it works for:</b> each app's assignment names the users the agent may act for there.</span></li>
       </ul>
       <h2>Clean up</h2>
       <p>Do it before your API key expires: uninstalling uses it to take the Expenses service out of Hush.</p>
@@ -773,13 +775,13 @@
         <li><div>In the Hush UI, delete the agent.</div></li>
         <li><div>Delete the API key, unless it has expired.</div></li>
       </ol>
-      <div class="nav-row">${goTo("killswitch", "Back")}</div>`;
+      <div class="nav-row">${goTo("rules", "Back")}</div>`;
   }
 
   // An optional step: its own guide beside the assistant.
   function extraStep(title, intro, guide, back, nextKey) {
     // What the step itself brings about isn't a problem to point out.
-    const expected = { killswitch: "disabled" }[STEPS[step].key];
+    const expected = { killswitch: "disabled", rules: "unavailable" }[STEPS[step].key];
     const first = !me.signed_in ? `<div class="guide"><h3>Sign in first</h3>${trySignIn()}</div>`
       : app.phase === "connect" ? `<div class="guide"><h3>Connect the Expenses service first</h3>${tryConnect()}</div>` : "";
     const problem = me.signed_in && app.phase !== expected ? tryProblem() : "";
@@ -807,11 +809,31 @@
       </ol>
       ${agentDisabled() ? `<p class="status no"><span>Right now, the agent is <b>switched off</b>.</span></p>`
         : registered() ? `<p class="status ok"><span>Right now, the agent is <b>on</b>.</span></p>` : ""}`,
-      "try", "recap");
+      "try", "rules");
+  }
+
+  function storyRules() {
+    return extraStep("Choose who it works for",
+      "Hush lets the agent reach an app only for the users you name. Leave yourself out, then let only yourself in.",
+      `<ol class="tasks">
+        <li><div>In the Hush UI, open <b>Applications › ${esc(appName())}</b>, then its <b>Assignments</b> tab.</div></li>
+        <li><div>Edit the assignment to <b>${esc(agentName() || "the agent")}</b>, and turn off <b>Assign to all users</b>.</div></li>
+        <li><div>Click <b>Add › Custom rule</b>, and set it to:
+          ${fields([["Email", "is not"], ["Value", val(me.email)]], "card")}</div></li>
+        <li><div>Click outside the rule to apply it. Then click refresh in the assistant: Hush no longer offers it
+          Expenses for you.</div></li>
+        <li><div>Change the rule to <b>is</b>, and click outside it to apply it. Then click <b>Try again</b> in the
+          assistant: it works again, for you alone.</div></li>
+      </ol>
+      <p class="aside">When you're done, only you can use the assistant on ${esc(appName())}. <b>Start over</b>, at
+        the top, puts it back as installed.</p>
+      <p class="aside">Hush can also limit who the agent works for at all, on every app: in the Registry, the agent's
+        <b>Assignment Rules</b>.</p>`,
+      "killswitch", "recap");
   }
 
   const STORIES = { welcome: storyWelcome, agent: storyAgent, access: storyAccess, try: storyTry,
-    killswitch: storyKillswitch, recap: storyRecap };
+    killswitch: storyKillswitch, rules: storyRules, recap: storyRecap };
 
   // ---- The assistant -------------------------------------------------------------
 
@@ -878,7 +900,7 @@
             : `<button class="abtn${hint("connect")}" type="button" data-app="connect"${app.connectUrl ? "" : " disabled"}>Connect the Expenses service</button>`);
       case "unavailable":
         return center(ICONS.lock, "I can't reach the Expenses service for you",
-          "Your company hasn't given me access to the Expenses service yet.", retry);
+          "Your company hasn't given me access to the Expenses service for you.", retry);
       case "disabled":
         return center(ICONS.lock, "I've been switched off",
           "Your company turned me off. I can't do anything for anyone until it turns me back on.", retry);
@@ -1102,7 +1124,7 @@
       case "consent": return ["wait", "Waiting for your approval"];
       case "blocked": return ["ok", "Blocked by policy, as expected"];
       case "connect": return ["wait", "Connect the Expenses service first"];
-      case "not_available": return ["no", "Not offered to the agent", "Is Expenses (tutorial) assigned to the agent?"];
+      case "not_available": return ["no", "Not offered to the agent", `Is ${esc(appName())} assigned to the agent, for you?`];
       case "not_assigned": return ["no", "Refused", ev.exchange?.error
         ? `Hush refused the token exchange: ${esc(ev.exchange.error)}` : `Hush refused: ${esc(ev.message)}`];
       case "disabled": return ["no", "Agent disabled", "Hush refused the agent: it's switched off."];
