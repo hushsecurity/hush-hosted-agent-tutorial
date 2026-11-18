@@ -10,6 +10,8 @@ EXPENSES_INTERNAL  Expenses' internal address, for the page to show what it saw
 SETUP_INTERNAL     Setup's address, for the page to show whether Hush has Expenses
 HELM_RELEASE       The tutorial's Helm release, for the page's commands
 CHART_VERSION      The tutorial's chart version, for the page's upgrade command
+BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD
+                   Set both for the page to ask for them
 """
 
 import logging
@@ -28,9 +30,28 @@ from agent.tutorial import ExpensesSide
 PORT = int(os.getenv("AGENT_PORT", "8080"))
 
 
+def basic_auth_from(environ) -> tuple[str, str] | None:
+    """The page's username and password, if it has them. A Secret with an empty
+    key would otherwise leave the page open, and one ending in a newline, as
+    `echo` writes it, would lock everyone out: no one can type it."""
+    username, password = environ.get("BASIC_AUTH_USERNAME"), environ.get("BASIC_AUTH_PASSWORD")
+    if username is None and password is None:
+        return None
+    if not (username and password):
+        raise ValueError("Set both BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD, neither empty.")
+    if username != username.strip() or password != password.strip():
+        raise ValueError("BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD must not start or end with "
+                         "whitespace, such as the newline echo adds.")
+    return username, password
+
+
 def main() -> None:
     if not os.getenv("HUSH_GATEWAY_URL"):
         sys.exit(f"Set HUSH_GATEWAY_URL.\n{__doc__}")
+    try:
+        basic_auth = basic_auth_from(os.environ)
+    except ValueError as e:
+        sys.exit(str(e))
     agent_url = os.getenv("AGENT_URL", f"http://localhost:{PORT}").rstrip("/")
     http = httpx2.AsyncClient(timeout=30)
     identity = Identity(
@@ -42,7 +63,7 @@ def main() -> None:
     expenses = ExpensesThroughGateway(identity, os.getenv("EXPENSES_APP", "custom-expenses"))
     expenses_side = ExpensesSide(http, os.getenv("EXPENSES_INTERNAL"), os.getenv("SETUP_INTERNAL"))
     config = uvicorn.Config(web.build(identity, expenses, agent_url, expenses_side, os.getenv("HELM_RELEASE"),
-                                      os.getenv("CHART_VERSION")),
+                                      os.getenv("CHART_VERSION"), basic_auth),
                             host="0.0.0.0", port=PORT)
     # After the Config: it sets up uvicorn's loggers.
     logging.getLogger("uvicorn.access").addFilter(web.WithoutQueries())

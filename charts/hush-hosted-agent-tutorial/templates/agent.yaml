@@ -61,6 +61,18 @@ spec:
               value: {{ .Chart.Version | quote }}
             - name: SETUP_INTERNAL
               value: {{ printf "http://%s:%v" (include "tutorial.componentName" (list . "setup")) .Values.setup.port | quote }}
+            {{- with .Values.agent.basicAuth.existingSecret }}
+            - name: BASIC_AUTH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: username
+            - name: BASIC_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: password
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.agent.port }}

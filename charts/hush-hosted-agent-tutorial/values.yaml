@@ -39,9 +39,19 @@ agent:
   # system:serviceaccount:<namespace>:<serviceAccount>.
   serviceAccount: expenses-assistant
   # Where your browser reaches the agent's page. The default suits
-  # kubectl port-forward; set it when serving the page from elsewhere.
+  # kubectl port-forward; set it when serving the page from elsewhere. The
+  # page's buttons work only under this address.
   url: http://localhost:8080
   port: 8080
+  # Ask for a username and password before showing the page or taking its
+  # actions, for a page others can reach: the name of a Secret in the release's
+  # namespace, with keys username and password. Off when empty, as through
+  # kubectl port-forward only those with access to the cluster reach it. Serve
+  # such a page over HTTPS: the password is otherwise sent in the clear. The
+  # agent reads the Secret when it starts: after changing it, run
+  #   kubectl rollout restart -n <namespace> deploy/hush-hosted-agent-tutorial-agent
+  basicAuth:
+    existingSecret: ""
   resources:
     requests: {cpu: 10m, memory: 64Mi}
     limits: {memory: 256Mi}

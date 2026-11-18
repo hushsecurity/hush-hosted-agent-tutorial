@@ -6,6 +6,7 @@ import pytest
 from uvicorn.logging import AccessFormatter
 
 from agent import web
+from agent.__main__ import basic_auth_from
 from agent.gateway import ExpensesThroughGateway, Outcome
 from tests.fake_hush import FakeHush
 from tests.test_agent_identity import identity_for
@@ -99,6 +100,46 @@ async def test_the_cookie_is_secure_when_the_agent_is_on_https(tmp_path):
     app = app_for(FakeHush(), tmp_path, "https://agent.example.com")
     async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="https://agent.example.com") as client:
         assert "secure" in (await client.get("/signin")).headers["set-cookie"].lower()
+
+
+async def test_a_page_with_a_password_asks_for_it(tmp_path):
+    identity = identity_for(FakeHush(), tmp_path)
+    app = web.build(identity, ExpensesThroughGateway(identity, "custom-expenses"), AGENT_URL,
+                    basic_auth=("hush", "s3cret"))
+    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url=AGENT_URL) as client:
+        for path in ("/", "/api/me", "/signin", "/callback"):
+            resp = await client.get(path)
+            assert resp.status_code == 401, path
+            assert resp.headers["www-authenticate"].startswith("Basic ")
+            assert "set-cookie" not in resp.headers
+        assert (await client.post("/api/start-over", auth=("hush", "s3cret!"))).status_code == 401
+        assert (await client.get("/api/me", headers={"Authorization": "Basic !!"})).status_code == 401
+        assert (await client.get("/healthz")).status_code == 200
+
+        client.auth = ("hush", "s3cret")
+        assert (await client.get("/api/me")).json() == {"signed_in": False}
+        await sign_in_with(client)
+        assert (await client.get("/api/me")).json()["signed_in"] is True
+
+
+@pytest.mark.parametrize("environ, expected", [
+    ({}, None),
+    ({"BASIC_AUTH_USERNAME": "hush", "BASIC_AUTH_PASSWORD": "s3 cret"}, ("hush", "s3 cret")),
+])
+def test_the_page_password_is_read(environ, expected):
+    assert basic_auth_from(environ) == expected
+
+
+@pytest.mark.parametrize("environ", [
+    {"BASIC_AUTH_USERNAME": "hush"},
+    {"BASIC_AUTH_PASSWORD": "s3cret"},
+    {"BASIC_AUTH_USERNAME": "hush", "BASIC_AUTH_PASSWORD": ""},
+    {"BASIC_AUTH_USERNAME": "hush", "BASIC_AUTH_PASSWORD": "s3cret\n"},
+    {"BASIC_AUTH_USERNAME": " hush", "BASIC_AUTH_PASSWORD": "s3cret"},
+])
+def test_a_page_password_no_one_could_type_is_refused(environ):
+    with pytest.raises(ValueError):
+        basic_auth_from(environ)
 
 
 async def test_an_exchange_that_fails_is_reported(tmp_path):

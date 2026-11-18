@@ -8,7 +8,10 @@ The tutorial page drives it all through the agent's API, from the browser:
 the session cookie comes along by itself.
 """
 
+import base64
+import binascii
 import dataclasses
+import hmac
 import logging
 import math
 import pathlib
@@ -19,7 +22,7 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
+from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.routing import Route
 
 from agent.gateway import ExpensesThroughGateway, Outcome
@@ -73,6 +76,31 @@ class Sessions(BaseHTTPMiddleware):
             # Lax: the cookie comes along when Hush sends the browser back to /callback.
             response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="lax", secure=self.secure)
         return response
+
+
+class BasicAuth(BaseHTTPMiddleware):
+    """Asks for a username and password, for a page others can reach. The load
+    balancer's health check goes without."""
+
+    def __init__(self, app, username: str, password: str):
+        super().__init__(app)
+        self.credentials = f"{username}:{password}".encode()
+
+    def signed_in(self, request: Request) -> bool:
+        scheme, _, encoded = request.headers.get("authorization", "").partition(" ")
+        if scheme.lower() != "basic":
+            return False
+        try:
+            given = base64.b64decode(encoded.strip(), validate=True)
+        except (binascii.Error, ValueError):
+            return False
+        return hmac.compare_digest(given, self.credentials)
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/healthz" or self.signed_in(request):
+            return await call_next(request)
+        return PlainTextResponse("sign in needed\n", status_code=401,
+                                 headers={"WWW-Authenticate": 'Basic realm="Hush tutorial", charset="UTF-8"'})
 
 
 def refused(e: HushRefused) -> JSONResponse:
@@ -309,13 +337,15 @@ async def bad_input(request: Request, e: BadInput) -> JSONResponse:
 
 def build(identity: Identity, expenses: ExpensesThroughGateway, agent_url: str,
           expenses_side: ExpensesSide | None = None, release: str | None = None,
-          chart_version: str | None = None) -> Starlette:
+          chart_version: str | None = None, basic_auth: tuple[str, str] | None = None) -> Starlette:
     """`agent_url` is where browsers reach the agent. `expenses_side` reads
     what Expenses saw, for the page. `release` and `chart_version` are the
-    tutorial's Helm release and chart version, for the page's commands."""
+    tutorial's Helm release and chart version, for the page's commands.
+    `basic_auth`, a username and password, is asked for before anything else."""
     agent_url = agent_url.rstrip("/")
     expenses_side = expenses_side or ExpensesSide(identity.http, None)
     sessions: dict[str, Session] = {}
+    middleware = [Middleware(BasicAuth, *basic_auth)] if basic_auth else []
+    middleware.append(Middleware(Sessions, secure=agent_url.startswith("https://"), sessions=sessions))
     return Starlette(routes=routes(identity, expenses, expenses_side, release, chart_version, agent_url, sessions),
-                     middleware=[Middleware(Sessions, secure=agent_url.startswith("https://"), sessions=sessions)],
-                     exception_handlers={BadInput: bad_input})
+                     middleware=middleware, exception_handlers={BadInput: bad_input})

@@ -1,9 +1,22 @@
 {{- $agent := include "tutorial.componentName" (list . "agent") -}}
+{{- if regexMatch "^https?://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:|/|$)" .Values.agent.url }}
 Open the tutorial's page:
 
   kubectl port-forward -n {{ .Release.Namespace }} svc/{{ $agent }} {{ .Values.agent.port }}:{{ .Values.agent.port }}
 
 then browse to {{ .Values.agent.url }} and follow the page.
+{{- else }}
+The tutorial's page is at {{ .Values.agent.url }}: serve the {{ $agent }} Service there.
+{{- if not .Values.agent.basicAuth.existingSecret }}
+
+WARNING: the page asks for no password, so anyone who reaches it can use it,
+Start over included. Set agent.basicAuth.existingSecret unless only you can.
+{{- else if hasPrefix "http://" .Values.agent.url }}
+
+WARNING: the page's password crosses the network unencrypted. Serve the page
+over HTTPS.
+{{- end }}
+{{- end }}
 {{- if not (include "tutorial.tunnel" .) }}
 
 The Expenses service is at {{ .Values.expenses.url }}: serve the {{ include "tutorial.componentName" (list . "expenses") }} Service there.

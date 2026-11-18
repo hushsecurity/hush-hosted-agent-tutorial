@@ -65,6 +65,17 @@ kubectl port-forward -n hush-hosted-agent-tutorial svc/hush-hosted-agent-tutoria
 Open <http://localhost:8080> and follow the page. If the page loses the
 agent, run the port-forward again.
 
+## Serving the page at its own address
+
+To reach the page without kubectl port-forward, such as behind a load
+balancer or ingress, expose only the `hush-hosted-agent-tutorial-agent`
+Service (port 8080), and set:
+
+- `agent.url`: the page's HTTPS address. The page's buttons are refused under
+  any other.
+- `agent.basicAuth.existingSecret`: a Secret in the tutorial's namespace, with
+  keys `username` and `password`, that the page then asks for.
+
 ## What you'll see
 
 1. **Register the agent** in Hush, by its Kubernetes identity.

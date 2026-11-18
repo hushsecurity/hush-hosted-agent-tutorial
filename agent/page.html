@@ -434,7 +434,8 @@
       return response.ok ? reply : { kind: reply.not_assigned ? "not_assigned" : "error", message: reply.message || `HTTP ${response.status}`,
         ...reply, status: response.status };
     } catch (error) {
-      return { kind: "error", message: "The agent's page is unreachable: is kubectl port-forward still running?" };
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+      return { kind: "error", message: `The agent's page is unreachable${local ? ": is kubectl port-forward still running?" : "."}` };
     }
   }
 
