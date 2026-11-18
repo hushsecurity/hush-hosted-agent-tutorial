@@ -603,7 +603,7 @@
       <h1>Register the agent</h1>
       <p>Hush knows the agent by its Kubernetes identity, so the agent holds no secret.</p>
       <ol class="tasks">
-        <li><div>In the Hush UI, go to <b>Agentic AI › Registry</b> and click <b>Register Agent</b>.</div></li>
+        <li><div>In the Hush UI, go to <b>Access › Agents › Registry</b> and click <b>Register Agent</b>.</div></li>
         <li><div>Name it: ${val(account || "expenses-assistant")}</div></li>
         <li><div>Turn on <b>Act for users</b>. It lets the agent work for signed-in users.</div></li>
         <li><div>In its <b>Authentication</b> tab, click <b>Add Authentication</b> and choose <b>Kubernetes</b>. Fill in:
@@ -632,7 +632,7 @@
         <div class="row">${goTo("agent", "Go to Register the agent")}</div></div>`;
     } else if (agentDisabled()) {
       result = `<div class="result no" role="status"><span>The agent is switched off in Hush. Turn its <b>Enabled</b>
-        switch back on to check its access.</span></div>`;
+        switch back on, in <b>Access › Agents › Registry</b>, to check its access.</span></div>`;
     } else if (a.error) {
       // Not "not assigned yet": waiting wouldn't help, so say it at once.
       result = `<div class="result no" role="status"><span>Couldn't read ${esc(appName())}'s assignments.</span>
@@ -650,7 +650,7 @@
       ${inHush().state === "ready" ? "" : inHushStatus()}
       <p>Agents need their own access to each app:</p>
       <ol class="tasks">
-        <li><div>In the Hush UI, go to <b>Applications</b> and open <b>${esc(appName())}</b>.</div></li>
+        <li><div>In the Hush UI, go to <b>Access › Agents › Applications</b> and open <b>${esc(appName())}</b>.</div></li>
         <li><div>In its <b>Assignments</b> tab, click <b>Add</b> and pick ${agentName() ? `<b>${esc(agentName())}</b>` : "your agent"}.</div></li>
       </ol>
       ${result}
@@ -682,7 +682,7 @@
     if (!me.signed_in) return "";
     if (app.phase === "disabled") {
       return `<div class="result no" role="status"><span>The agent is switched off in Hush. Turn its <b>Enabled</b>
-        switch back on in the Registry.</span></div>`;
+        switch back on in <b>Access › Agents › Registry</b>.</span></div>`;
     }
     if (app.phase === "unavailable") {
       return `<div class="result no" role="status"><span>The assistant has no access to the Expenses service. Assign it in
@@ -760,7 +760,7 @@
     return `
       <h1>Recap</h1>
       ${agentDisabled() ? `<div class="warn">The agent is still switched off in Hush. Turn its <b>Enabled</b> switch back
-        on in the Registry.</div>` : ""}
+        on in <b>Access › Agents › Registry</b>.</div>` : ""}
       <ul class="points">
         <li><span><b>No secret:</b> the assistant used only its Kubernetes identity.</span></li>
         <li><span><b>Acts for you:</b> every call named both you and the assistant.</span></li>
@@ -774,7 +774,7 @@
       <ol class="tasks">
         <li><div>Uninstall the tutorial: ${cmd(`helm uninstall ${release} -n ${namespace}`)}</div></li>
         ${namespace === OWN_NAMESPACE ? `<li><div>Delete its namespace: ${cmd(`kubectl delete namespace ${namespace}`)}</div></li>` : ""}
-        <li><div>In the Hush UI, delete the agent.</div></li>
+        <li><div>In the Hush UI, delete the agent, in <b>Access › Agents › Registry</b>.</div></li>
         <li><div>Delete the API key, unless it has expired.</div></li>
       </ol>
       <div class="nav-row">${goTo("rules", "Back")}</div>`;
@@ -804,7 +804,7 @@
     return extraStep("Kill switch",
       "One switch in Hush stops the agent at once: for every user, on every app. Nothing to revoke, rotate or redeploy.",
       `<ol class="tasks">
-        <li><div>In the Hush UI, go to <b>Agentic AI › Registry</b>. Find
+        <li><div>In the Hush UI, go to <b>Access › Agents › Registry</b>. Find
           <b>${esc(agentName() || "expenses-assistant")}</b> and turn off its <b>Enabled</b> switch.</div></li>
         <li><div>Click refresh in the assistant. Hush refuses the agent before it reaches any app.</div></li>
         <li><div>Turn <b>Enabled</b> back on, then click <b>Try again</b> in the assistant. It works at once.</div></li>
@@ -818,7 +818,7 @@
     return extraStep("Choose who it works for",
       "Hush lets the agent reach an app only for the users you name. Leave yourself out, then let only yourself in.",
       `<ol class="tasks">
-        <li><div>In the Hush UI, open <b>Applications › ${esc(appName())}</b>, then its <b>Assignments</b> tab.</div></li>
+        <li><div>In the Hush UI, open <b>Access › Agents › Applications</b>, then <b>${esc(appName())}</b> and its <b>Assignments</b> tab.</div></li>
         <li><div>Edit the assignment to <b>${esc(agentName() || "the agent")}</b>, and turn off <b>Assign to all users</b>.</div></li>
         <li><div>Click <b>Add › Custom rule</b>, and set it to:
           ${fields([["Email", "is not"], ["Value", val(me.email)]], "card")}</div></li>
@@ -1180,7 +1180,7 @@
         ${then ? `<span class="then">${then}</span>` : ""}</li>`;
     }).join("");
     setHtml(box, `${howto()}${rows ? `<ol class="feed">${rows}</ol>` : `<p class="empty">Nothing yet: the assistant's first call for you shows up here.</p>`}
-      <p class="aside">Hush records every call too: in the Hush UI, open <b>Applications</b>, then
+      <p class="aside">Hush records every call too: in the Hush UI, open <b>Access › Agents › Applications</b>, then
         <b>${esc(appName())}</b>, and its <b>Activity</b> tab.</p>`);
     seenEvents = new Set((activity || []).map((ev) => `${ev.id}:${ev.repeats}`));
   }

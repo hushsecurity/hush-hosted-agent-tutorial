@@ -133,8 +133,9 @@ helm uninstall tutorial -n hush-hosted-agent-tutorial
 kubectl delete namespace hush-hosted-agent-tutorial
 ```
 
-Then, in the Hush UI, delete the agent, and the API key unless it has expired.
+Then, in the Hush UI, delete the agent, in Access › Agents › Registry, and the
+API key unless it has expired.
 
 If uninstalling fails, for example because the key expired, remove "Expenses
-(tutorial)" in the Hush UI, first from Applications, then from Catalog, and
-run the uninstall again with `--no-hooks`.
+(tutorial)" in the Hush UI, first from Access › Agents › Applications, then from
+Catalog, and run the uninstall again with `--no-hooks`.

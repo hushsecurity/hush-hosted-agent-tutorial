@@ -27,7 +27,7 @@ Uninstall before the API key expires: it also takes the Expenses service out of 
   helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
 
 If uninstalling fails, for example because the key has expired, remove
-"Expenses (tutorial)" in the Hush UI, first from Applications, then from
-Catalog, and run:
+"Expenses (tutorial)" in the Hush UI, first from
+Access › Agents › Applications, then from Catalog, and run:
 
   helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }} --no-hooks
