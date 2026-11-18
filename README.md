@@ -105,13 +105,15 @@ gave stay until they expire.
 ## The Expenses service is public
 
 The gateway must reach the Expenses service, so by default a Cloudflare quick
-tunnel gives it a random public address. Cloudflare sees that traffic, and
-signing in to the Expenses service asks for an access code the page shows. Some
+tunnel gives it a random public address. Cloudflare sees that traffic. Some
 endpoint security tools flag `cloudflared`.
 
 To use your own address instead, put a load balancer or ingress with HTTPS in
 front of the `hush-hosted-agent-tutorial-expenses` Service (port 8000), and set
 `expenses.url` to its address at install.
+
+Either way, signing in to the Expenses service asks for an access code the page
+shows, to keep strangers out.
 
 If the tunnel's pod restarts, its address changes. Restart the Expenses service
 and setup so Hush learns the new one:

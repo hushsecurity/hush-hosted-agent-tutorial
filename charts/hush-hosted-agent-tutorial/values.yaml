@@ -64,9 +64,11 @@ expenses:
   # Expenses there.
   #
   # Left empty, a Cloudflare quick tunnel gives Expenses a random public
-  # address under trycloudflare.com instead, and signing in to Expenses asks
-  # for an access code the chart generates (the tutorial page shows it). The
-  # tunnel's address changes whenever its pod restarts.
+  # address under trycloudflare.com instead. The tunnel's address changes
+  # whenever its pod restarts.
+  #
+  # Either way, signing in to Expenses asks for an access code the chart
+  # generates (the tutorial page shows it).
   url: ""
   port: 8000
   # What Expenses saw, and its address: for the agent's page only.

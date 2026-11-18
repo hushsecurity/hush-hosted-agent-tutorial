@@ -1,5 +1,4 @@
 {{- $name := include "tutorial.componentName" (list . "expenses") }}
-{{- $tunnel := include "tutorial.tunnel" . }}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -12,10 +11,9 @@ data:
   # Signs the clients Expenses registers, such as the gateway: kept, so they
   # stay registered when Expenses restarts.
   client-key: {{ include "tutorial.expensesSecretValue" (list . "client-key") | b64enc | quote }}
-  {{- if $tunnel }}
-  # Signing in to Expenses asks for it.
+  # Signing in to Expenses asks for it: Expenses is public, at a tunnel's
+  # address or at expenses.url.
   code: {{ include "tutorial.expensesSecretValue" (list . "code") | b64enc | quote }}
-  {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -57,13 +55,11 @@ spec:
             - name: EXPENSES_INTERNAL_PORT
               value: {{ .Values.expenses.internalPort | quote }}
             {{- include "tutorial.expensesAddressEnv" . | nindent 12 }}
-            {{- if $tunnel }}
             - name: EXPENSES_ACCESS_CODE
               valueFrom:
                 secretKeyRef:
                   name: {{ include "tutorial.expensesSecret" . }}
                   key: code
-            {{- end }}
             - name: EXPENSES_CLIENT_KEY
               valueFrom:
                 secretKeyRef:
