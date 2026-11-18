@@ -26,6 +26,10 @@ spec:
     metadata:
       labels:
         {{- include "tutorial.selectorLabels" (list . "agent") | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       serviceAccountName: {{ .Values.agent.serviceAccount }}
       automountServiceAccountToken: false

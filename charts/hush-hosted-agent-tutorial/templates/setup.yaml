@@ -29,6 +29,10 @@ spec:
     metadata:
       labels:
         {{- include "tutorial.selectorLabels" (list . "setup") | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       automountServiceAccountToken: false
       {{- with .Values.nodeSelector }}
@@ -100,6 +104,10 @@ spec:
     metadata:
       labels:
         {{- include "tutorial.selectorLabels" (list . "setup") | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false

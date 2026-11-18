@@ -102,3 +102,9 @@ networkPolicy:
 
 # Where the tutorial's pods may run, for example {kubernetes.io/arch: amd64}.
 nodeSelector: {}
+
+# Annotations for the tutorial's pods. Expenses' data and the agent's sign-ins
+# live in memory and go when a pod moves: on a cluster that moves pods on its
+# own, keep them in place, for example {karpenter.sh/do-not-disrupt: "true"}
+# (with --set, use --set-string: values must be strings).
+podAnnotations: {}
