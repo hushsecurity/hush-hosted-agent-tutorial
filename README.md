@@ -72,7 +72,9 @@ agent, run the port-forward again.
    each tool.
 3. **Try the assistant**: sign in, connect the Expenses service, then list,
    add and delete expenses, and see what Hush lets through.
-4. **Recap**, and how to clean up.
+4. **Kill switch** (optional): switch the agent off in Hush, see it stopped at
+   once, and switch it back on.
+5. **Recap**, and how to clean up.
 
 **Start over**, at the top of the page, puts Hush back as installed so you can
 go through the steps again: it unregisters the agent, makes Expenses

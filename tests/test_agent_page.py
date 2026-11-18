@@ -100,6 +100,14 @@ async def test_setup_before_the_agent_is_registered(tmp_path):
     assert setup["expenses"]["assigned"] == {"assigned": None, "error": None}
 
 
+async def test_setup_tells_the_agent_is_switched_off(tmp_path):
+    async with page_for(FakeHush(disabled=True), tmp_path, Store()) as client:
+        setup = (await client.get("/api/setup")).json()
+
+    assert setup["agent"]["hush"] == {"error": "agent is disabled", "reason": "agent is disabled",
+                                      "unknown": False, "disabled": True}
+
+
 async def test_a_call_shows_the_account_the_expenses_service_acted_on(tmp_path, monkeypatch):
     store = Store()
 

@@ -32,10 +32,15 @@ SERVICE_ACCOUNT = "system:serviceaccount:tutorial:expenses-assistant"
 SERVICE_ACCOUNT_TOKEN = jwt({"iss": CLUSTER_ISSUER, "sub": SERVICE_ACCOUNT, "aud": [ISSUER]})
 
 
+def disabled_answer() -> JSONResponse:
+    return JSONResponse({"error": "invalid_grant", "error_description": "agent is disabled"}, status_code=400)
+
+
 class FakeHush:
     def __init__(self, user_email: str = "dana@example.com", user_ttl: int = 300,
-                 registered: bool | Callable[[], bool] = True):
+                 registered: bool | Callable[[], bool] = True, disabled: bool = False):
         self.registered = registered
+        self.disabled = disabled
         self.user_email = user_email
         self.user_ttl = user_ttl
         self.requests: list[dict] = []
@@ -64,14 +69,21 @@ class FakeHush:
                 registered = self.registered() if callable(self.registered) else self.registered
                 if not registered or form.get("client_assertion") != SERVICE_ACCOUNT_TOKEN:
                     return JSONResponse({"error": "invalid_client", "error_description": "invalid assertion"}, status_code=401)
+                if self.disabled:
+                    return disabled_answer()
                 return JSONResponse({"access_token": jwt({"sub": AGENT_ID, "agent_id": AGENT_ID, "agent_name": AGENT_NAME}),
                                      "expires_in": self.user_ttl})
+            if grant == "refresh_token" and (self.disabled or self.user_email not in ALLOWED):
+                return JSONResponse({"error": "invalid_grant",
+                                     "error_description": "this agent may not act for this user"}, status_code=400)
             if grant in ("authorization_code", "refresh_token"):
                 return JSONResponse({"access_token": jwt({**user, "aud": AGENT_RESOURCE}),
                                      "refresh_token": "refresh-1", "expires_in": self.user_ttl})
             if grant == "urn:ietf:params:oauth:grant-type:token-exchange":
                 if form.get("client_assertion") != SERVICE_ACCOUNT_TOKEN:
                     return JSONResponse({"error": "invalid_client", "error_description": "invalid assertion"}, status_code=401)
+                if self.disabled:
+                    return disabled_answer()
                 if self.user_email not in ALLOWED:
                     return JSONResponse({"error": "invalid_grant",
                                          "error_description": "this agent may not act for this user"},

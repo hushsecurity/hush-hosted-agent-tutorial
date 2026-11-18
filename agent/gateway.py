@@ -61,6 +61,7 @@ class Outcome:
                      at `url` when there is one
       blocked        the gateway's policy blocks the call
       not_assigned   Hush refused the exchange: the agent may not act for the user
+      disabled       Hush refused the exchange: the agent is switched off
       signed_out     the user's sign-in is gone (the agent restarted, the tutorial started over, or it expired)
       not_available  Expenses isn't on the gateway for this user and agent
       refused        Hush refused something else
@@ -99,7 +100,8 @@ class ExpensesThroughGateway:
                 return Outcome("signed_out", e.description or e.error)
             if e.status >= 500:
                 return Outcome("error", f"Hush failed: {e.description or e.error}")
-            return Outcome("not_assigned" if e.not_assigned else "refused", e.description or e.error)
+            kind = "disabled" if e.disabled else "not_assigned" if e.not_assigned else "refused"
+            return Outcome(kind, e.description or e.error)
         except Exception as e:
             log.exception("%s through the gateway failed", tool)
             if exchanged.get("asked") and "claims" not in exchanged:

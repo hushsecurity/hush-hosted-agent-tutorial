@@ -169,6 +169,38 @@ async def test_a_refused_refresh_signs_the_user_out(tmp_path, monkeypatch):
     assert "sign in again" in signed_out.value.description
 
 
+async def test_a_refresh_refused_while_the_agent_is_off_keeps_the_sign_in(tmp_path):
+    hush = FakeHush()
+    identity = identity_for(hush, tmp_path)
+    session = Session()
+    await sign_in(identity, session)
+    session.user.expires_at = time.time() + 10
+
+    hush.disabled = True
+    with pytest.raises(HushRefused) as refused:
+        await identity.user_token(session)
+    assert refused.value.disabled
+    assert session.user is not None
+
+    hush.disabled = False
+    await identity.user_token(session)
+    assert session.user.expires_at > time.time() + 60
+
+
+async def test_a_refresh_refused_for_this_user_keeps_the_sign_in(tmp_path):
+    hush = FakeHush()
+    identity = identity_for(hush, tmp_path)
+    session = Session()
+    await sign_in(identity, session)
+    session.user.expires_at = time.time() + 10
+
+    hush.user_email = "sam@example.com"
+    with pytest.raises(HushRefused) as refused:
+        await identity.user_token(session)
+    assert refused.value.not_assigned and not refused.value.disabled
+    assert session.user is not None
+
+
 async def test_hush_failing_a_refresh_keeps_the_user_signed_in(tmp_path, monkeypatch):
     identity = identity_for(FakeHush(), tmp_path)
     session = Session()

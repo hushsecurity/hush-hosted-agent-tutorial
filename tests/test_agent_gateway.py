@@ -156,6 +156,26 @@ async def test_a_refused_exchange_is_kept(tmp_path):
     assert "claims" not in event["exchange"] and event["exchange"]["error"]
 
 
+async def test_an_agent_switched_off_is_told_apart(tmp_path):
+    hush = FakeHush()
+    async with agent(tmp_path, FakeGateway(), hush) as (expenses, session):
+        hush.disabled = True
+        outcome = await expenses.run(session, "list_expenses", {})
+    assert (outcome.kind, outcome.message) == ("disabled", "agent is disabled")
+    [event] = session.activity.events
+    assert event["exchange"] == {"error": "agent is disabled"}
+
+
+async def test_an_agent_switched_off_while_refreshing_is_told_apart(tmp_path):
+    hush = FakeHush()
+    async with agent(tmp_path, FakeGateway(), hush) as (expenses, session):
+        session.user.expires_at = time.time() + 10
+        hush.disabled = True
+        outcome = await expenses.run(session, "list_expenses", {})
+        assert session.user is not None
+    assert outcome.kind == "disabled"
+
+
 async def test_a_failed_refresh_is_not_the_exchanges(tmp_path, monkeypatch):
     async def hush_down(self, session):
         raise HushRefused("refresh", 503, "temporarily_unavailable", "Hush is down")

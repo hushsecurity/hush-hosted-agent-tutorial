@@ -66,6 +66,7 @@
   nav.steps .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--surface-2); color: var(--ink); }
   nav.steps button[aria-current="step"] .n { background: var(--accent); color: var(--bg); }
   nav.steps .done .n { background: var(--ok-soft); color: var(--ok); }
+  nav.steps .opt { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; }
 
   main .wrap { padding-block: 32px 56px; }
   .layout { display: grid; grid-template-columns: minmax(0, 720px); gap: 40px; }
@@ -307,6 +308,7 @@
     { key: "agent", title: "Register the agent" },
     { key: "access", title: "Grant access" },
     { key: "try", title: "Try the assistant" },
+    { key: "killswitch", title: "Kill switch", optional: true },
     { key: "recap", title: "Recap" },
   ];
   const STEP_KEY = "hush-hosted-agent-tutorial-step";
@@ -320,6 +322,8 @@
   const CHECK_MIN_MS = 600;
   const CATEGORIES = ["Travel", "Lodging", "Meals", "Office", "Other"];
   const TRY_TASKS = ["try-list", "try-submit", "try-delete"];
+  // Steps that show the assistant beside the guide.
+  const APP_STEPS = ["try", "killswitch"];
   // The namespace the README installs into, for the tutorial alone: the
   // page offers to delete no other.
   const OWN_NAMESPACE = "hush-hosted-agent-tutorial";
@@ -437,7 +441,9 @@
   const goTo = (key, label) => `<button class="btn" type="button" data-step="${stepOf(key)}">${label}</button>`;
   const agentName = () => setup?.agent?.hush?.name || setup?.agent?.hush?.id;
   const appName = () => setup?.expenses?.in_hush?.display_name || "Expenses (tutorial)";
-  const registered = () => Boolean(setup?.agent?.hush?.id);
+  const agentDisabled = () => setup?.agent?.hush?.disabled === true;
+  // A disabled agent is still registered: Hush only won't let it act.
+  const registered = () => Boolean(setup?.agent?.hush?.id) || agentDisabled();
   const assigned = () => setup?.expenses?.assigned?.assigned === true;
   const inHush = () => setup?.expenses?.in_hush || { state: "unknown" };
 
@@ -519,6 +525,7 @@
         <li><div>Grant it access to the Expenses service.</div></li>
         <li><div>Try the assistant as one of its users.</div></li>
       </ol>
+      <p class="note">Then, if you like, an optional step: switch the agent off, and back on.</p>
       <div class="nav-row"><button class="btn primary" type="button" data-step="${stepOf("agent")}">Start</button></div>`;
   }
 
@@ -575,7 +582,8 @@
     } else if (!setup) {
       result = "";
     } else if (registered()) {
-      result = `<div class="result ok" role="status"><span>✓ Hush knows the agent as <b>${esc(agentName())}</b>.</span></div>`;
+      result = `<div class="result ok" role="status"><span>✓ Hush knows the agent${agentName() ? ` as <b>${esc(agentName())}</b>` : ""}.
+        ${agentDisabled() ? "It's switched off right now." : ""}</span></div>`;
     } else if (!hush.unknown) {
       // Not "not registered yet": waiting wouldn't help, so say it at once.
       result = `<div class="result no" role="status"><span>Couldn't ask Hush about the agent.</span>
@@ -619,6 +627,9 @@
     } else if (!registered()) {
       result = `<div class="result no" role="status"><span>Register the agent first.</span>
         <div class="row">${goTo("agent", "Go to Register the agent")}</div></div>`;
+    } else if (agentDisabled()) {
+      result = `<div class="result no" role="status"><span>The agent is switched off in Hush. Turn its <b>Enabled</b>
+        switch back on to check its access.</span></div>`;
     } else if (a.error) {
       // Not "not assigned yet": waiting wouldn't help, so say it at once.
       result = `<div class="result no" role="status"><span>Couldn't read ${esc(appName())}'s assignments.</span>
@@ -666,6 +677,10 @@
   // What stops the assistant, past signing in: not a step of its own.
   function tryProblem() {
     if (!me.signed_in) return "";
+    if (app.phase === "disabled") {
+      return `<div class="result no" role="status"><span>The agent is switched off in Hush. Turn its <b>Enabled</b>
+        switch back on in the Registry.</span></div>`;
+    }
     if (app.phase === "unavailable") {
       return `<div class="result no" role="status"><span>The assistant has no access to the Expenses service. Assign it in
         Grant access.</span><div class="row">${goTo("access", "Go to Grant access")}</div></div>`;
@@ -732,7 +747,8 @@
       ${consentAsked ? `<div class="result wait"><span>Adding needs your OK. Click <b>Review the request</b> in the
         assistant and approve it. The assistant then adds it again.</span>
         <span>If Hush asks for how long, choose <b>10 minutes</b>. Until your approval expires, Hush won't ask again.</span></div>` : ""}
-      ${next ? "" : `<div class="result ok"><span>That's the whole flow. Next, a recap.</span></div>`}`;
+      ${next ? "" : `<div class="result ok"><span>That's the whole flow. Next, a recap, or first an optional step.</span>
+        <div class="row">${goTo("killswitch", "Kill switch")}</div></div>`}`;
   }
 
   function storyRecap() {
@@ -740,11 +756,14 @@
     const release = setup?.release || "<release>";
     return `
       <h1>Recap</h1>
+      ${agentDisabled() ? `<div class="warn">The agent is still switched off in Hush. Turn its <b>Enabled</b> switch back
+        on in the Registry.</div>` : ""}
       <ul class="points">
         <li><span><b>No secret:</b> the assistant used only its Kubernetes identity.</span></li>
         <li><span><b>Acts for you:</b> every call named both you and the assistant.</span></li>
         <li><span><b>Access control:</b> it reached the Expenses service only after you assigned it.</span></li>
         <li><span><b>Guardrails:</b> listing went through, adding waited for you, deleting was blocked.</span></li>
+        <li><span><b>Kill switch:</b> one switch stops the agent at once, for every user, on every app.</span></li>
       </ul>
       <h2>Clean up</h2>
       <p>Do it before your API key expires: uninstalling uses it to take the Expenses service out of Hush.</p>
@@ -754,10 +773,45 @@
         <li><div>In the Hush UI, delete the agent.</div></li>
         <li><div>Delete the API key, unless it has expired.</div></li>
       </ol>
-      <div class="nav-row">${goTo("try", "Back")}</div>`;
+      <div class="nav-row">${goTo("killswitch", "Back")}</div>`;
   }
 
-  const STORIES = { welcome: storyWelcome, agent: storyAgent, access: storyAccess, try: storyTry, recap: storyRecap };
+  // An optional step: its own guide beside the assistant.
+  function extraStep(title, intro, guide, back, nextKey) {
+    // What the step itself brings about isn't a problem to point out.
+    const expected = { killswitch: "disabled" }[STEPS[step].key];
+    const first = !me.signed_in ? `<div class="guide"><h3>Sign in first</h3>${trySignIn()}</div>`
+      : app.phase === "connect" ? `<div class="guide"><h3>Connect the Expenses service first</h3>${tryConnect()}</div>` : "";
+    const problem = me.signed_in && app.phase !== expected ? tryProblem() : "";
+    return `
+      <div class="try-head">
+        <h1>${title}</h1>
+        <p class="prereq"><span>Optional</span><span>About 2 minutes</span></p>
+        <p>${intro}</p>
+      </div>
+      <div class="try-guide">
+        ${first || `${problem}<div class="guide">${guide}</div>`}
+        <div class="nav-row">${goTo(back, "Back")}
+          <button class="btn" type="button" data-step="${stepOf(nextKey)}">Next</button></div>
+      </div>`;
+  }
+
+  function storyKillswitch() {
+    return extraStep("Kill switch",
+      "One switch in Hush stops the agent at once: for every user, on every app. Nothing to revoke, rotate or redeploy.",
+      `<ol class="tasks">
+        <li><div>In the Hush UI, go to <b>Agentic AI › Registry</b>. Find
+          <b>${esc(agentName() || "expenses-assistant")}</b> and turn off its <b>Enabled</b> switch.</div></li>
+        <li><div>Click refresh in the assistant. Hush refuses the agent before it reaches any app.</div></li>
+        <li><div>Turn <b>Enabled</b> back on, then click <b>Try again</b> in the assistant. It works at once.</div></li>
+      </ol>
+      ${agentDisabled() ? `<p class="status no"><span>Right now, the agent is <b>switched off</b>.</span></p>`
+        : registered() ? `<p class="status ok"><span>Right now, the agent is <b>on</b>.</span></p>` : ""}`,
+      "try", "recap");
+  }
+
+  const STORIES = { welcome: storyWelcome, agent: storyAgent, access: storyAccess, try: storyTry,
+    killswitch: storyKillswitch, recap: storyRecap };
 
   // ---- The assistant -------------------------------------------------------------
 
@@ -772,6 +826,7 @@
 
   // What the guide asks the reader to click next in the assistant, if anything.
   function nextTarget() {
+    // The optional steps start in the Hush UI.
     if (STEPS[step].key !== "try") return null;
     if (!me.signed_in) return "signin";
     if (app.phase === "connect") return app.connecting ? null : "connect";
@@ -824,6 +879,9 @@
       case "unavailable":
         return center(ICONS.lock, "I can't reach the Expenses service for you",
           "Your company hasn't given me access to the Expenses service yet.", retry);
+      case "disabled":
+        return center(ICONS.lock, "I've been switched off",
+          "Your company turned me off. I can't do anything for anyone until it turns me back on.", retry);
       case "refused":
         return center(ICONS.lock, "I can't work for you",
           "Your company hasn't allowed me to act for you.", retry);
@@ -868,6 +926,7 @@
       case "connect": app.phase = "connect"; app.connectUrl = r.url; return;
       case "not_available": app.phase = "unavailable"; return;
       case "not_assigned": app.phase = "refused"; return;
+      case "disabled": app.phase = "disabled"; return;
       case "signed_out": signedOut(r.message); return;
       default:
         if (r.error === "login_required") { signedOut(r.message); return; }
@@ -1044,7 +1103,9 @@
       case "blocked": return ["ok", "Blocked by policy, as expected"];
       case "connect": return ["wait", "Connect the Expenses service first"];
       case "not_available": return ["no", "Not offered to the agent", "Is Expenses (tutorial) assigned to the agent?"];
-      case "not_assigned": return ["no", "Refused", `Hush refused the token exchange: ${esc(ev.exchange?.error || ev.message)}`];
+      case "not_assigned": return ["no", "Refused", ev.exchange?.error
+        ? `Hush refused the token exchange: ${esc(ev.exchange.error)}` : `Hush refused: ${esc(ev.message)}`];
+      case "disabled": return ["no", "Agent disabled", "Hush refused the agent: it's switched off."];
       case "signed_out": return ["no", "Signed out", esc(ev.message)];
       case "refused": return ["no", "Refused", `Hush answered: ${esc(ev.message)}`];
       default: return ["no", "Failed", esc(ev.exchange?.error ? `The token exchange failed: ${ev.exchange.error}` : ev.message)];
@@ -1108,12 +1169,13 @@
     const numbered = ["agent", "access", "try"];
     setHtml(document.getElementById("stepbar"), STEPS.map((s, i) => {
       const n = numbered.indexOf(s.key) + 1;
-      const mark = isDone(s.key) && i !== step ? "✓" : n || "";
-      return `<li><button type="button" data-step="${i}" class="${isDone(s.key) ? "done" : ""}"${i === step ? ` aria-current="step"` : ""}>
-        ${mark ? `<span class="n">${mark}</span>` : ""}${esc(s.title)}</button></li>`;
+      const finished = !s.optional && isDone(s.key);
+      const mark = finished && i !== step ? "✓" : n || "";
+      return `<li><button type="button" data-step="${i}" class="${finished ? "done" : ""}"${i === step ? ` aria-current="step"` : ""}>
+        ${mark ? `<span class="n">${mark}</span>` : ""}${esc(s.title)}${s.optional ? ` <span class="opt">optional</span>` : ""}</button></li>`;
     }).join(""));
 
-    const trying = key === "try";
+    const trying = APP_STEPS.includes(key);
     document.getElementById("layout").classList.toggle("with-app", trying);
     document.getElementById("app-col").hidden = !trying;
     document.getElementById("behind").hidden = !trying;
@@ -1131,7 +1193,7 @@
     history.replaceState(null, "", `#${STEPS[step].key}`);
     render();
     window.scrollTo({ top: 0 });
-    if (STEPS[step].key === "try") {
+    if (APP_STEPS.includes(STEPS[step].key)) {
       if (me.signed_in && app.phase === "loading" && app.busy !== "list") appList();
       refreshFeed();
     }
@@ -1189,6 +1251,12 @@
   async function loadSetup() {
     const fresh = await api("/api/setup");
     if (fresh.agent) {
+      // Switched off, the agent can't learn its id from Hush: keep what the page knew.
+      const known = setup?.agent?.hush;
+      if (fresh.agent.hush?.disabled && known?.id) {
+        fresh.agent.hush = { ...fresh.agent.hush, id: known.id, name: known.name };
+        fresh.expenses.assigned = setup.expenses.assigned;
+      }
       setup = fresh;
       setupError = null;
     } else {
@@ -1212,16 +1280,17 @@
       forgetTries();
     }
     render();
-    if (me.signed_in && STEPS[step].key === "try") appList();
+    if (me.signed_in && APP_STEPS.includes(STEPS[step].key)) appList();
     refreshFeed();
-    setInterval(() => { if (!document.hidden && STEPS[step].key === "try") refreshFeed(); }, FEED_POLL_MS);
+    setInterval(() => { if (!document.hidden && APP_STEPS.includes(STEPS[step].key)) refreshFeed(); }, FEED_POLL_MS);
     // Hush gets the Expenses service in the background, and the reader
     // registers the agent and assigns it in the Hush UI: show each once done.
     const waiting = () => {
       const key = STEPS[step].key;
       return (setupError && ["welcome", "agent", "access"].includes(key))
         || (["welcome", "access"].includes(key) && inHush().state !== "ready")
-        || (key === "agent" && !registered()) || (key === "access" && !assigned());
+        || (key === "agent" && !registered()) || (key === "access" && !assigned())
+        || key === "killswitch" || (key === "recap" && agentDisabled());
     };
     setInterval(async () => {
       if (document.hidden || !waiting()) return;

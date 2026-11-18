@@ -41,6 +41,11 @@ class HushRefused(Exception):
     def not_assigned(self) -> bool:
         return "may not act for this user" in self.description
 
+    @property
+    def disabled(self) -> bool:
+        """The agent is switched off in Hush: Hush says so in these words only."""
+        return self.error == "invalid_grant" and self.description == "agent is disabled"
+
 
 @dataclasses.dataclass
 class Gateway:
@@ -206,14 +211,33 @@ class Identity:
                     "client_id": await self._client(),
                 })
             except HushRefused as e:
-                # Hush refusing the refresh ends the sign-in; Hush failing
-                # keeps it, to refresh again on the next call.
+                # The agent may not act for the user now (switched off, or a
+                # rule leaves them out): the sign-in stays, as Hush refuses
+                # before spending the refresh token, to work once allowed again.
+                if e.not_assigned:
+                    disabled = await self._disabled()
+                    if disabled:
+                        raise disabled from e
+                    raise
+                # Hush refusing the refresh otherwise ends the sign-in; Hush
+                # failing keeps it, to refresh again on the next call.
                 if 400 <= e.status < 500:
                     session.user = None
                     raise HushRefused("sign-in", 401, "login_required", "your sign-in expired, sign in again") from e
                 raise
             session.user = _user_tokens(body, previous_refresh=user.refresh)
             return session.user.access
+
+    async def _disabled(self) -> HushRefused | None:
+        """Hush's refusal if the agent is switched off: Hush refuses the user's
+        refresh in the same words whether it is or a rule leaves the user out."""
+        try:
+            await self.registration()
+        except HushRefused as e:
+            return e if e.disabled else None
+        except Exception:
+            return None
+        return None
 
     # --- The agent exchanges the user's token and its own for one naming both ---
 

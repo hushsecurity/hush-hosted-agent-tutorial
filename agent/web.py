@@ -170,10 +170,10 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
             # `reason` is Hush's own words, under the agent's explanation.
             cause = e.__cause__ if isinstance(e.__cause__, HushRefused) else e
             hush = {"error": e.description or e.error, "reason": cause.description or cause.error,
-                    "unknown": e.error == "invalid_client"}
+                    "unknown": e.error == "invalid_client", "disabled": e.disabled}
         except Exception as e:
             log.warning("asking Hush about the agent failed: %s", e)
-            hush = {"error": str(e), "reason": str(e), "unknown": False}
+            hush = {"error": str(e), "reason": str(e), "unknown": False, "disabled": False}
         about = await expenses_side.about()
         assigned = await expenses_side.assigned_to(agent_id) if agent_id else {"assigned": None, "error": None}
         return JSONResponse({
