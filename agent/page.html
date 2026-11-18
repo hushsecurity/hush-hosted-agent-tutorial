@@ -365,6 +365,7 @@
     menuOpen: false,
     signinError: null,    // why the last sign-in, or the session, ended
     signinRefused: false, // Hush refused the sign-in, rather than the session ending
+    signingIn: false,     // on the way to Hush's sign-in page
   };
   // Hush asked the user about the expense being added.
   let consentAsked = false;
@@ -888,7 +889,8 @@
         return center(ICONS.logo, "Your expense reports, handled",
           "I keep your expense reports up to date: I list them, add new ones and tidy up old ones, for you.",
           `${app.signinError ? `<p class="fine">${esc(app.signinError)}</p>` : ""}
-          <a class="abtn${hint("signin")}" href="/signin">Sign in with your company account</a>`);
+          ${app.signingIn ? `<a class="abtn" href="/signin" data-signin aria-busy="true">${spinner}Signing in…</a>`
+            : `<a class="abtn${hint("signin")}" href="/signin" data-signin>Sign in with your company account</a>`}`);
       case "loading":
         return `<div class="appbody center"><span class="spin" aria-hidden="true"></span><p>Opening your expenses…</p></div>`;
       case "connect":
@@ -1222,6 +1224,20 @@
   }
 
   document.addEventListener("click", async (event) => {
+    // Hush, then the company's sign-in page, can take a moment to show: say it started.
+    const elsewhere = event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
+    if (event.target.closest("a[data-signin]") && !elsewhere) {
+      app.signingIn = true;
+      // The busy button is a link too, to click again should the reader stop
+      // the page: keep keyboard focus on it.
+      const focused = document.activeElement?.matches("a[data-signin]");
+      // After the link has navigated: a link taken out of the page doesn't.
+      setTimeout(() => {
+        render();
+        if (focused) document.querySelector("a[data-signin]")?.focus();
+      });
+      return;
+    }
     const target = event.target.closest("button");
     if (!target) return;
     if (target.dataset.copy !== undefined) {
@@ -1265,6 +1281,14 @@
     if (event.target.id === "howto") { howtoOpen = event.target.open; save(HOWTO_KEY, howtoOpen); }
     if (event.target.dataset?.box) openBoxes.set(event.target.dataset.box, event.target.open);
   }, true);
+
+  // Back to this page as it was left, mid sign-in.
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted && app.signingIn) {
+      app.signingIn = false;
+      render();
+    }
+  });
 
   // Back from connecting the Expenses service in the other tab: look at once.
   window.addEventListener("focus", () => { if (app.connecting) appList({ quiet: true }); });
