@@ -31,6 +31,12 @@ class NotOurs(Exception):
                          "set expenses.name to another name")
 
 
+class NameTaken(Exception):
+    def __init__(self, display_name: str):
+        super().__init__(f"Hush already has an app named \"{display_name}\", perhaps another install's: "
+                         "set expenses.displayName to another name")
+
+
 class Unmarked(Exception):
     def __init__(self, name: str):
         super().__init__(f"{name} is on the gateway, but its catalog entry doesn't carry the tutorial's mark")
@@ -83,6 +89,8 @@ class Expenses:
     name: str  # in the catalog; the gateway's application comes from custom-<name>
     deployment: str  # the gateway's
     url: str = ""  # its public address: not needed to remove it
+    # Unique among the tenant's apps: Hush refuses a second app by the same name.
+    display_name: str = DISPLAY_NAME
 
     @property
     def catalog_id(self) -> str:
@@ -105,7 +113,7 @@ async def put(api: HushAPI, expenses: Expenses) -> dict:
     """Creates Expenses in Hush, or brings it up to date. Returns the
     gateway's application."""
     custom = {
-        "display_name": DISPLAY_NAME,
+        "display_name": expenses.display_name,
         "urls": [{"label": None, "url": f"{expenses.url}/mcp"}],
         "tools": await tools(expenses.url),
     }
@@ -122,12 +130,21 @@ async def put(api: HushAPI, expenses: Expenses) -> dict:
         await api.request("PATCH", f"/v1/applications/custom/{expenses.name}/mcp", custom)
 
     app = await application(api, expenses)
-    if app is None:
-        app = await api.request("POST", f"/v1/applications/mcp/{expenses.catalog_id}", {
-            "display_name": DISPLAY_NAME, "deployment_ids": [expenses.deployment], "enabled": True,
-        })
-    # Assignments the reader added stay: only assign_all is set.
-    return await api.request("PATCH", f"/v1/applications/{app['id']}/mcp", {"assign_all": True})
+    try:
+        if app is None:
+            app = await api.request("POST", f"/v1/applications/mcp/{expenses.catalog_id}", {
+                "display_name": expenses.display_name, "deployment_ids": [expenses.deployment], "enabled": True,
+            })
+        # Assignments the reader added stay: only assign_all is set. A new
+        # display name too, as the catalog entry's doesn't carry over.
+        changes = {"assign_all": True}
+        if app.get("display_name") != expenses.display_name:
+            changes["display_name"] = expenses.display_name
+        return await api.request("PATCH", f"/v1/applications/{app['id']}/mcp", changes)
+    except HushAPIError as e:
+        if e.status == 409:
+            raise NameTaken(expenses.display_name) from e
+        raise
 
 
 async def remove(api: HushAPI, expenses: Expenses) -> None:

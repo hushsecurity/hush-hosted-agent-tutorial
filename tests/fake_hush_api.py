@@ -18,6 +18,8 @@ class FakeHushAPI:
         # Agent ids whose deletion Hush fails.
         self.broken_agents: set[str] = set()
         self.calls: list[str] = []
+        # The bodies of PATCHes to gateway applications.
+        self.patches: list[dict] = []
         self.page_size = page_size
         self.tokens = itertools.count(1)
         self.app_ids = itertools.count(1)
@@ -95,6 +97,8 @@ class FakeHushAPI:
             catalog_id = path.split("/")[4]
             if catalog_id.removeprefix("custom-") not in self.custom:
                 return httpx2.Response(404)
+            if any(a.get("display_name") == body["display_name"] for a in self.apps.values()):
+                return httpx2.Response(409, json={"detail": "Application already exists", "location": "name"})
             app = self.add_app(catalog_id, body["deployment_ids"][0], display_name=body["display_name"])
             return httpx2.Response(201, json=app)
         if path.startswith("/v1/applications/"):
@@ -104,6 +108,10 @@ class FakeHushAPI:
             if method == "GET" and path.endswith("/mcp"):
                 return httpx2.Response(200, json=app)
             if method == "PATCH" and path.endswith("/mcp"):
+                self.patches.append(body)
+                if "display_name" in body and any(
+                        a is not app and a.get("display_name") == body["display_name"] for a in self.apps.values()):
+                    return httpx2.Response(409, json={"detail": "Application already exists", "location": "name"})
                 app.update(body)
                 return httpx2.Response(200, json=app)
             if method == "DELETE":

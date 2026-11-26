@@ -59,6 +59,9 @@ agent:
 expenses:
   # Its name in the Hush catalog; on the gateway it is custom-<name>.
   name: expenses-tutorial
+  # Its name in the Hush UI. Hush allows one app by a name: set another for a
+  # second install in the same org.
+  displayName: Expenses (tutorial)
   # Expenses' public HTTPS address, for a load balancer or ingress you set up
   # in front of the expenses Service. The gateway and your browser both reach
   # Expenses there.

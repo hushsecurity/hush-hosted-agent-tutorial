@@ -7,6 +7,7 @@ HUSH_GATEWAY_ISSUER    The gateway's issuer: names Hush's API and the gateway
 HUSH_API_KEY_ID        A Hush API key with applications:read, applications:write,
 HUSH_API_KEY_SECRET    agents:read and agents:write
 EXPENSES_NAME          Expenses' name in the Hush catalog (default expenses-tutorial)
+EXPENSES_DISPLAY_NAME  Its name in the Hush UI (default Expenses (tutorial))
 EXPENSES_URL           Expenses' public address
 EXPENSES_TUNNEL        Or: the quick tunnel's metrics address, to take it from
 EXPENSES_SERVICE       Expenses' public port inside the cluster: Hush hears of
@@ -46,10 +47,15 @@ def check_settings(with_url: bool) -> None:
         sys.exit(f"HUSH_GATEWAY_ISSUER: {e}")
 
 
+def display_name() -> str:
+    return os.getenv("EXPENSES_DISPLAY_NAME") or hush.DISPLAY_NAME
+
+
 async def expenses_in_hush(http: httpx2.AsyncClient, with_url: bool) -> tuple[hush.HushAPI, hush.Expenses]:
     api_url, deployment = hush.api_and_deployment(os.environ["HUSH_GATEWAY_ISSUER"])
     api = hush.HushAPI(http, api_url, os.environ["HUSH_API_KEY_ID"], os.environ["HUSH_API_KEY_SECRET"])
-    expenses = hush.Expenses(os.getenv("EXPENSES_NAME", "expenses-tutorial"), deployment)
+    expenses = hush.Expenses(os.getenv("EXPENSES_NAME", "expenses-tutorial"), deployment,
+                             display_name=display_name())
     if with_url:
         url = os.getenv("EXPENSES_URL") or await tunnel.public_address(http, os.environ["EXPENSES_TUNNEL"])
         expenses.url = url.rstrip("/")
@@ -80,7 +86,8 @@ class Setup:
         self.http = http
         self.expenses_service = expenses_service
         self.agent_subject = agent_subject
-        self.status = {"state": "working", "error": None}
+        # The page names Expenses by it from the start, even if putting it in Hush fails.
+        self.status = {"state": "working", "error": None, "display_name": display_name()}
         self.api: hush.HushAPI | None = None
         self.expenses: hush.Expenses | None = None
         self.app_id: str | None = None
@@ -111,7 +118,7 @@ class Setup:
                             expenses.catalog_id, app.get("name"))
             self.app_id = app["id"]
             self.status.update(state="ready", error=None, catalog=expenses.name, app=app.get("name"),
-                               display_name=hush.DISPLAY_NAME, url=expenses.url)
+                               display_name=expenses.display_name, url=expenses.url)
             return
 
     async def start_over(self, issuer: str | None) -> dict:

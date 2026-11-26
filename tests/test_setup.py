@@ -35,6 +35,46 @@ async def test_puts_expenses_in_the_catalog_and_on_the_gateway_for_all_users():
     assert app["assign_all"] is True
 
 
+async def test_a_second_install_in_the_org_needs_a_display_name_of_its_own():
+    fake = FakeHushAPI()
+    await hush.put(api_for(fake), EXPENSES)
+    other = hush.Expenses("expenses-testing", "dep-2", EXPENSES.url)
+
+    with pytest.raises(hush.NameTaken, match="expenses.displayName"):
+        await hush.put(api_for(fake), other)
+    other.display_name = "Expenses (testing)"
+    app = await hush.put(api_for(fake), other)
+
+    assert app["display_name"] == "Expenses (testing)"
+    assert fake.custom["expenses-testing"]["display_name"] == "Expenses (testing)"
+
+
+async def test_a_new_display_name_renames_the_app_on_the_gateway():
+    fake = FakeHushAPI()
+    first = await hush.put(api_for(fake), EXPENSES)
+
+    renamed = hush.Expenses(EXPENSES.name, "dep-1", EXPENSES.url, display_name="Expenses (renamed)")
+    again = await hush.put(api_for(fake), renamed)
+
+    assert again["id"] == first["id"]
+    assert fake.apps[first["id"]]["display_name"] == "Expenses (renamed)"
+
+
+async def test_an_unchanged_display_name_isnt_sent_again():
+    fake = FakeHushAPI()
+    await hush.put(api_for(fake), EXPENSES)
+    fake.patches = []
+
+    await hush.put(api_for(fake), EXPENSES)
+
+    assert fake.patches == [{"assign_all": True}]
+
+
+async def test_the_status_names_expenses_before_it_is_in_hush(monkeypatch):
+    monkeypatch.setenv("EXPENSES_DISPLAY_NAME", "Expenses (testing)")
+    assert Setup(httpx2.AsyncClient()).status["display_name"] == "Expenses (testing)"
+
+
 async def test_a_new_address_updates_expenses_and_keeps_its_assignments():
     fake = FakeHushAPI()
     api = api_for(fake)
@@ -227,7 +267,8 @@ async def test_a_tunnel_without_an_address_is_a_failed_status(monkeypatch):
     with pytest.raises(TimeoutError):
         async with asyncio.timeout(0.05):
             await setup.put()
-    assert setup.status == {"state": "failed", "error": "the tunnel reported no address"}
+    assert setup.status == {"state": "failed", "error": "the tunnel reported no address",
+                            "display_name": hush.DISPLAY_NAME}
 
 
 async def test_hush_learns_the_address_only_once_expenses_answers(monkeypatch):
@@ -247,7 +288,8 @@ async def test_hush_learns_the_address_only_once_expenses_answers(monkeypatch):
         async with asyncio.timeout(0.05):
             await setup.put()
     assert fake.calls == []
-    assert setup.status == {"state": "failed", "error": f"Expenses doesn't answer at {SERVICE}"}
+    assert setup.status == {"state": "failed", "error": f"Expenses doesn't answer at {SERVICE}",
+                            "display_name": hush.DISPLAY_NAME}
 
 
 CLUSTER = "https://oidc.cluster.example.com/id/ABC"

@@ -100,7 +100,8 @@ gave stay until they expire.
 - In `hush-hosted-agent-tutorial`: the agent and its page, the Expenses service,
   a setup service that holds the API key, and a Cloudflare quick tunnel.
 - In Hush: "Expenses (tutorial)", in the catalog and on your gateway for all
-  users.
+  users. Another install in the same org needs another name:
+  `expenses.displayName`.
 
 ## The Expenses service is public
 

@@ -63,6 +63,8 @@ app.kubernetes.io/managed-by: {{ (index . 0).Release.Service }}
   value: {{ .Values.gateway.issuer | quote }}
 - name: EXPENSES_NAME
   value: {{ .Values.expenses.name | quote }}
+- name: EXPENSES_DISPLAY_NAME
+  value: {{ .Values.expenses.displayName | default "Expenses (tutorial)" | quote }}
 - name: HUSH_API_KEY_ID
   valueFrom:
     secretKeyRef:
