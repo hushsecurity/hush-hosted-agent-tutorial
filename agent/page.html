@@ -13,6 +13,7 @@
     /* The assistant's own brand: deliberately not Hush's. */
     --app: #0b7a63; --app-ink: #ffffff; --app-soft: #e3f4ef; --app-bg: #fbfcfc; --app-line: #d6e6e1; --app-text: #1d2b28;
     --app-muted: #5d6f6a; --app-shadow: 0 1px 2px rgb(16 40 34 / 0.06), 0 12px 32px rgb(16 40 34 / 0.12);
+    --stage: #e7efec; --stage-dot: #cfdcd7; --chrome: #dfe5e3; --chrome-ink: #3d4a47;
     --sans: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
@@ -23,6 +24,7 @@
       --deny: #ff9d86; --deny-soft: #3a1a13; --note: #ffd47a; --note-soft: #362a0f; --code-bg: #05050e; --code-ink: #e6e8f2;
       --app: #3cc9a5; --app-ink: #062a21; --app-soft: #12302a; --app-bg: #101c1a; --app-line: #23403a; --app-text: #e3efec;
       --app-muted: #93aba5; --app-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+      --stage: #0f1c19; --stage-dot: #1d332e; --chrome: #1b2a27; --chrome-ink: #b5c9c3;
       color-scheme: dark;
     }
   }
@@ -32,6 +34,7 @@
     --deny: #ff9d86; --deny-soft: #3a1a13; --note: #ffd47a; --note-soft: #362a0f; --code-bg: #05050e; --code-ink: #e6e8f2;
     --app: #3cc9a5; --app-ink: #062a21; --app-soft: #12302a; --app-bg: #101c1a; --app-line: #23403a; --app-text: #e3efec;
     --app-muted: #93aba5; --app-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+    --stage: #0f1c19; --stage-dot: #1d332e; --chrome: #1b2a27; --chrome-ink: #b5c9c3;
     color-scheme: dark;
   }
 
@@ -163,12 +166,26 @@
   .checklist .tick { color: var(--muted); }
   .checklist.inline { flex-direction: row; flex-wrap: wrap; gap: 8px 24px; }
 
-  /* The assistant: the agent's own app, not part of the tutorial. */
-  .app-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  .app-label { display: flex; align-items: baseline; gap: 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-  .app-label span { text-transform: none; letter-spacing: 0; font-weight: 400; }
-  .appwin { background: var(--app-bg); color: var(--app-text); border: 1px solid var(--app-line); border-radius: 18px; box-shadow: var(--app-shadow);
-    overflow: hidden; font-family: var(--sans); }
+  /* The assistant: the agent's own app, not part of the tutorial. It stands on
+     a ground of its own, in a browser window, so the reader sees they've
+     switched from the Hush UI to an app their users use. */
+  .app-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 18px; border-radius: 18px;
+    background-color: var(--stage); background-image: radial-gradient(var(--stage-dot) 1.2px, transparent 1.3px); background-size: 14px 14px; }
+  .app-who { display: flex; align-items: center; gap: 12px; }
+  .app-who .ico { width: 40px; height: 40px; border-radius: 12px; background: var(--app); color: var(--app-ink); display: grid; place-items: center; flex: none; }
+  .app-who .ico svg { width: 22px; height: 22px; }
+  .app-who h2 { font-size: 19px; color: var(--app-text); }
+  .app-who p { font-size: 13.5px; color: var(--app-muted); }
+  .browser { border: 1px solid var(--app-line); border-radius: 14px; box-shadow: var(--app-shadow); overflow: hidden; }
+  .chrome { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--chrome); }
+  .chrome .dots { display: flex; gap: 6px; flex: none; }
+  .chrome .dots i { width: 10px; height: 10px; border-radius: 50%; background: #ff5f57; }
+  .chrome .dots i:nth-child(2) { background: #febc2e; }
+  .chrome .dots i:nth-child(3) { background: #28c840; }
+  .addr { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; background: var(--app-bg); color: var(--chrome-ink); border-radius: 999px;
+    padding: 4px 12px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .addr svg { flex: none; width: 12px; height: 12px; }
+  .appwin { background: var(--app-bg); color: var(--app-text); font-family: var(--sans); }
   .appwin h3 { color: var(--app-text); }
   .appbar { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--app); color: var(--app-ink); }
   .applogo { width: 34px; height: 34px; border-radius: 10px; background: rgb(255 255 255 / 0.18); display: grid; place-items: center; flex: none; }
@@ -291,8 +308,15 @@
     <div class="layout" id="layout">
       <section class="story" id="story"></section>
       <section class="app-col" id="app-col" aria-label="The Spend Assistant" hidden>
-        <div class="app-label">The agent's app <span>what your users see</span></div>
-        <div class="appwin" id="app"></div>
+        <div class="app-who">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></span>
+          <div><h2>Your users see</h2><p>The agent's own app, on your company's site. Not part of Hush.</p></div>
+        </div>
+        <div class="browser">
+          <div class="chrome"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="addr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>spend-assistant.yourcompany.com</span></div>
+          <div class="appwin" id="app"></div>
+        </div>
       </section>
       <section class="feed-col" id="behind" aria-label="Behind the scenes" hidden>
         <div class="panel-head"><h2>Behind the scenes</h2><span class="sub">What Hush did</span></div>
