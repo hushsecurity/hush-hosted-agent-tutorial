@@ -739,7 +739,7 @@
   function tryUse() {
     const tasks = [
       ["try-list", "See your expenses", "a read: allowed by default"],
-      ["try-submit", "Add an expense", "a write: asks you first, by default"],
+      ["try-submit", "Add an expense", "a write: asks the user first, by default"],
       ["try-delete", "Delete an expense", "a delete: blocked by default"],
     ];
     const next = tasks.find(([key]) => !done.has(key))?.[0];
