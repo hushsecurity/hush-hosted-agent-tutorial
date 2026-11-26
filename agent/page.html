@@ -284,6 +284,7 @@
   .badge.ok { background: var(--ok-soft); color: var(--ok); }
   .badge.wait { background: var(--note-soft); color: var(--note); }
   .badge.no { background: var(--deny-soft); color: var(--deny); }
+  .expect { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
   .tag { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .tag.ok { color: var(--ok); }
   .tag.no { color: var(--deny); }
@@ -1133,7 +1134,9 @@
     return esc(ev.tool);
   }
 
-  // What Hush decided, in a few words, and a note only when something is off.
+  // What Hush decided, in a few words; a note only when something is off;
+  // and whether it's what the tutorial set out to show. The badge's colour is
+  // the decision alone: a block is red, even when it's the one expected.
   function decision(ev) {
     if (ev.kind === "decision") {
       if (ev.decision === "granted") return ["ok", "You approved", "The assistant adds it again, now with your approval."];
@@ -1144,12 +1147,12 @@
       case "done":
         if (ev.approval === "just") return ["ok", "Allowed, after your approval"];
         if (ev.approval === "earlier") return ["ok", "Allowed: you approved earlier"];
-        if (ev.tool === "delete_expense") return ["wait", "Allowed", "Is <code>delete_expense</code> still blocked in Hush?"];
-        if (ev.tool === "submit_expense") return ["wait", "Allowed without asking",
+        if (ev.tool === "delete_expense") return ["ok", "Allowed", "Is <code>delete_expense</code> still blocked in Hush?"];
+        if (ev.tool === "submit_expense") return ["ok", "Allowed without asking",
           "Hush didn't ask: an approval you gave earlier may still be valid, or <code>submit_expense</code> isn't set to ask."];
         return ["ok", "Allowed"];
       case "consent": return ["wait", "Waiting for your approval"];
-      case "blocked": return ["ok", "Blocked by policy, as expected"];
+      case "blocked": return ["no", "Blocked by policy", "", ev.tool === "delete_expense"];
       case "connect": return ["wait", "Connect the Expenses service first"];
       case "not_available": return ["no", "Not offered to the agent", `Is ${esc(appName())} assigned to the agent, for you?`];
       case "not_assigned": return ["no", "Refused", ev.exchange?.error
@@ -1196,11 +1199,11 @@
     }
     const fresh = (ev) => seenEvents && !seenEvents.has(`${ev.id}:${ev.repeats}`);
     const rows = (activity || []).map((ev) => {
-      const [tone, said, note] = decision(ev);
+      const [tone, said, note, expected] = decision(ev);
       const [tag, aside] = reached(ev);
       const then = [note && `${note}${/[.?!]$/.test(note) ? "" : "."}`, aside].filter(Boolean).join(" ");
       return `<li class="ev${fresh(ev) ? " new" : ""}"><span class="when">${esc(clock(ev.time))}</span>
-        <span class="what"><b>${action(ev)}</b><span class="badge ${tone}">${said}${ev.repeats > 1 ? ` ×${ev.repeats}` : ""}</span>${tag}</span>
+        <span class="what"><b>${action(ev)}</b><span class="badge ${tone}">${said}${ev.repeats > 1 ? ` ×${ev.repeats}` : ""}</span>${expected ? `<span class="expect">✓ as expected</span>` : ""}${tag}</span>
         ${then ? `<span class="then">${then}</span>` : ""}</li>`;
     }).join("");
     setHtml(box, `${howto()}${rows ? `<ol class="feed">${rows}</ol>` : `<p class="empty">Nothing yet: the assistant's first call for you shows up here.</p>`}
