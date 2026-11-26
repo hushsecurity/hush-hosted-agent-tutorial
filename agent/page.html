@@ -270,24 +270,46 @@
   .claims .k { font-size: 12.5px; color: var(--accent); font-weight: 600; }
   .claims .v { font-family: var(--mono); font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
   .claims .v span { font-family: var(--sans); color: var(--muted); }
-  .feed { list-style: none; margin: 0; padding: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-  .ev { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 2px 12px; padding: 10px 14px; font-size: 14px; }
-  .ev + .ev { border-top: 1px solid var(--line); }
-  .ev.new { animation: flash 1.8s ease-out; }
+  /* The log: a row per event, a column per actor. A cell the call never
+     reached is hatched; an arrow marks where the call went on. */
+  .feed-scroll { overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
+  .feed { border-collapse: collapse; width: 100%; font-size: 13.5px; table-layout: fixed; }
+  .feed .c-when { width: 7.5em; }
+  .feed th { text-align: left; font-size: 12.5px; font-weight: 600; color: var(--ink); padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .feed th .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .sw.app { background: var(--app); }
+  .sw.hush { background: var(--accent); }
+  .sw.svc { background: var(--faint); }
+  .feed td { padding: 10px 12px; vertical-align: top; border-top: 1px solid var(--line); }
+  .feed tbody tr:first-child td { border-top: 0; }
+  .feed tr.new td { animation: flash 1.8s ease-out; }
   @keyframes flash { from { background: color-mix(in srgb, var(--accent) 12%, transparent); } to { background: transparent; } }
-  @media (prefers-reduced-motion: reduce) { .ev.new { animation: none; } }
-  .ev .when { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; padding-top: 2px; }
-  .ev .what { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; }
-  .ev .what b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
-  .ev .then { grid-column: 2; font-size: 13px; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .feed tr.new td { animation: none; } }
+  .feed .when { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 12px; }
+  .feed b { color: var(--ink); font-weight: 600; }
+  .feed .s { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+  .feed .pass { position: relative; padding-right: 26px; }
+  .feed .pass::after { content: "→"; position: absolute; right: 6px; top: 10px; color: var(--faint); font-weight: 700; }
+  .feed .gone { color: var(--faint); background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--line) 55%, transparent) 6px 7px); }
+  .feed .none { background: var(--surface); }
+  .feed .served { color: var(--ok); font-weight: 600; }
+  .feed .badge { display: inline-block; white-space: normal; }
+  @media (max-width: 640px) {
+    .feed thead { display: none; }
+    .feed, .feed tbody, .feed tr, .feed td { display: block; }
+    .feed tr { padding: 10px 12px; border-top: 1px solid var(--line); }
+    .feed tbody tr:first-child { border-top: 0; }
+    .feed td, .feed tbody tr:first-child td, .feed .when { border: 0; padding: 3px 0 3px 84px; position: relative; }
+    .feed td::before { content: attr(data-l); position: absolute; left: 0; top: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+    .feed td.none { display: none; }
+    .feed .pass { padding-right: 0; }
+    .feed .pass::after { display: none; }
+  }
   .badge { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
   .badge.ok { background: var(--ok-soft); color: var(--ok); }
   .badge.wait { background: var(--note-soft); color: var(--note); }
   .badge.no { background: var(--deny-soft); color: var(--deny); }
   .expect { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
-  .tag { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .tag.ok { color: var(--ok); }
-  .tag.no { color: var(--deny); }
   .empty { font-size: 13px; color: var(--muted); padding: 12px 14px; background: var(--bg); border: 1px dashed var(--line); border-radius: 12px; }
 </style>
 </head>
@@ -320,7 +342,7 @@
         </div>
       </section>
       <section class="feed-col" id="behind" aria-label="Behind the scenes" hidden>
-        <div class="panel-head"><h2>Behind the scenes</h2><span class="sub">What Hush did</span></div>
+        <div class="panel-head"><h2>Behind the scenes</h2><span class="sub">What each side did, in order</span></div>
         <div id="feed"></div>
       </section>
     </div>
@@ -1124,6 +1146,7 @@
 
   // What the assistant did, in the user's words.
   function action(ev) {
+    if (ev.kind === "decision") return "";
     const a = ev.arguments || {};
     if (ev.tool === "list_expenses") return "List your expenses";
     if (ev.tool === "submit_expense") return `Add “${esc(a.description)}”, ${esc(money(a.amount))}`;
@@ -1153,7 +1176,7 @@
         return ["ok", "Allowed"];
       case "consent": return ["wait", "Waiting for your approval"];
       case "blocked": return ["no", "Blocked by policy", "", ev.tool === "delete_expense"];
-      case "connect": return ["wait", "Connect the Expenses service first"];
+      case "connect": return ["wait", "Needs your Expenses login"];
       case "not_available": return ["no", "Not offered to the agent", `Is ${esc(appName())} assigned to the agent, for you?`];
       case "not_assigned": return ["no", "Refused", ev.exchange?.error
         ? `Hush refused the token exchange: ${esc(ev.exchange.error)}` : `Hush refused: ${esc(ev.message)}`];
@@ -1166,14 +1189,15 @@
 
   // Whether the call reached the Expenses service, and on which of its
   // accounts: the one the user connected, which needn't be their Hush email.
+  // Its cell's class goes with it: none for an event not about a call.
   function reached(ev) {
-    if (ev.kind === "decision") return ["", ""];
-    if (ev.outcome === "consent") return [`<span class="tag">not sent yet</span>`, ""];
-    if (ev.outcome !== "done") return [`<span class="tag no">✕ didn't reach the Expenses service</span>`, ""];
+    if (ev.kind === "decision") return ["none", ""];
+    if (ev.outcome !== "done") return ["gone", "not reached"];
+    const did = { list_expenses: "Listed", submit_expense: "Added", delete_expense: "Deleted" }[ev.tool] || "Done";
     const account = ev.seen?.account;
-    const tag = `<span class="tag ok">→ Expenses service${account ? ` as ${esc(account)}` : ""}</span>`;
     const other = account && me.email && account.toLowerCase() !== me.email.toLowerCase();
-    return [tag, other ? `That's the account you connected, not your Hush email.` : ""];
+    return ["", `<span class="served">✓ ${did}</span>${account ? `<span class="s">as ${esc(account)}</span>` : ""}
+      ${other ? `<span class="s">That's the account you connected, not your Hush email.</span>` : ""}`];
   }
 
   // Told once: how every call reaches the Expenses service.
@@ -1200,13 +1224,19 @@
     const fresh = (ev) => seenEvents && !seenEvents.has(`${ev.id}:${ev.repeats}`);
     const rows = (activity || []).map((ev) => {
       const [tone, said, note, expected] = decision(ev);
-      const [tag, aside] = reached(ev);
-      const then = [note && `${note}${/[.?!]$/.test(note) ? "" : "."}`, aside].filter(Boolean).join(" ");
-      return `<li class="ev${fresh(ev) ? " new" : ""}"><span class="when">${esc(clock(ev.time))}</span>
-        <span class="what"><b>${action(ev)}</b><span class="badge ${tone}">${said}${ev.repeats > 1 ? ` ×${ev.repeats}` : ""}</span>${expected ? `<span class="expect">✓ as expected</span>` : ""}${tag}</span>
-        ${then ? `<span class="then">${then}</span>` : ""}</li>`;
+      const [served, service] = reached(ev);
+      const did = action(ev);
+      return `<tr${fresh(ev) ? ` class="new"` : ""}><td class="when" data-l="Time">${esc(clock(ev.time))}</td>
+        <td class="${did ? "pass" : "none"}" data-l="Assistant">${did ? `<b>${did}</b>` : ""}</td>
+        <td class="${served === "" ? "pass" : ""}" data-l="Hush"><span class="badge ${tone}">${said}${ev.repeats > 1 ? ` ×${ev.repeats}` : ""}</span>
+          ${expected ? `<span class="expect">✓ as expected</span>` : ""}
+          ${note ? `<span class="s">${note}${/[.?!]$/.test(note) ? "" : "."}</span>` : ""}</td>
+        <td class="${served}" data-l="Service">${service}</td></tr>`;
     }).join("");
-    setHtml(box, `${howto()}${rows ? `<ol class="feed">${rows}</ol>` : `<p class="empty">Nothing yet: the assistant's first call for you shows up here.</p>`}
+    const table = `<div class="feed-scroll"><table class="feed"><colgroup><col class="c-when"><col><col><col></colgroup><thead><tr><th>Time</th>
+      <th><span class="sw app"></span>Assistant</th><th><span class="sw hush"></span>Hush</th>
+      <th><span class="sw svc"></span>Expenses service</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    setHtml(box, `${howto()}${rows ? table : `<p class="empty">Nothing yet: the assistant's first call for you shows up here.</p>`}
       <p class="aside">Hush records every call too: in the Hush UI, open <b>Access › Agents › Applications</b>, then
         <b>${esc(appName())}</b>, and its <b>Activity</b> tab.</p>`);
     seenEvents = new Set((activity || []).map((ev) => `${ev.id}:${ev.repeats}`));

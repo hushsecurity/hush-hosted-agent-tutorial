@@ -44,7 +44,7 @@ async def test_refused_when_not_assigned(tmp_path):
     assert (await client.post("/api/expenses/list")).json()["kind"] == "not_assigned"
 
 
-async def test_the_activity_is_this_users_newest_first_and_ends_with_the_sign_in(tmp_path, monkeypatch):
+async def test_the_activity_is_this_users_oldest_first_and_lasts_as_long_as_the_sign_in(tmp_path, monkeypatch):
     async def run(self, session, tool, arguments):
         session.activity.events.append({"tool": tool})
         return Outcome("done", data=[])
@@ -53,7 +53,7 @@ async def test_the_activity_is_this_users_newest_first_and_ends_with_the_sign_in
     client = await signed_in_client(FakeHush(), tmp_path)
     await client.post("/api/expenses/list")
     await client.post("/api/expenses/delete", content='{"expense_id": 1}')
-    assert [e["tool"] for e in (await client.get("/api/activity")).json()["events"]] == ["delete_expense", "list_expenses"]
+    assert [e["tool"] for e in (await client.get("/api/activity")).json()["events"]] == ["list_expenses", "delete_expense"]
 
     other = httpx2.AsyncClient(transport=client._transport, base_url=AGENT_URL)
     assert (await other.get("/api/activity")).json() == {"events": []}

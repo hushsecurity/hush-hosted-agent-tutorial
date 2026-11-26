@@ -275,9 +275,9 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
         return response
 
     async def activity(request: Request) -> JSONResponse:
-        """What the agent did for this browser's user, newest first, each call
+        """What the agent did for this browser's user, oldest first, each call
         that went through with what the Expenses service recorded of it."""
-        events = [dict(e) for e in reversed(request.state.session.activity.events)]
+        events = [dict(e) for e in request.state.session.activity.events]
         went_through = [e for e in events if e.get("outcome") == "done"]
         if went_through:
             pair_with_log(went_through, await expenses_side.calls())
