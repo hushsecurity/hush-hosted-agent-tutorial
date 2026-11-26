@@ -281,7 +281,7 @@
   .sw.hush { background: var(--accent); }
   .sw.svc { background: var(--faint); }
   .feed td { padding: 10px 12px; vertical-align: top; border-top: 1px solid var(--line); }
-  .feed tbody tr:first-child td { border-top: 0; }
+  .feed thead + tbody tr:first-child td { border-top: 0; }
   .feed tr.new td { animation: flash 1.8s ease-out; }
   @keyframes flash { from { background: color-mix(in srgb, var(--accent) 12%, transparent); } to { background: transparent; } }
   @media (prefers-reduced-motion: reduce) { .feed tr.new td { animation: none; } }
@@ -294,14 +294,25 @@
   .feed .none { background: var(--surface); }
   .feed .served { color: var(--ok); font-weight: 600; }
   .feed .badge { display: inline-block; white-space: normal; }
+  .feed .more td { padding: 0; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .feed .more button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; background: none;
+    font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; text-align: left; }
+  .feed .more button:hover { text-decoration: underline; }
+  .feed .more button:focus-visible { outline-offset: -2px; }
+  .feed .more [aria-expanded="true"] .caret { transform: rotate(90deg); }
+  .feed .caret { display: inline-block; transition: transform 0.15s; }
+  @media (prefers-reduced-motion: reduce) { .feed .caret { transition: none; } }
   @media (max-width: 640px) {
     .feed thead { display: none; }
     .feed, .feed tbody, .feed tr, .feed td { display: block; }
     .feed tr { padding: 10px 12px; border-top: 1px solid var(--line); }
-    .feed tbody tr:first-child { border-top: 0; }
-    .feed td, .feed tbody tr:first-child td, .feed .when { border: 0; padding: 3px 0 3px 84px; position: relative; }
+    .feed thead + tbody tr:first-child { border-top: 0; }
+    .feed td, .feed thead + tbody tr:first-child td, .feed .when { border: 0; padding: 3px 0 3px 84px; position: relative; }
     .feed td::before { content: attr(data-l); position: absolute; left: 0; top: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
     .feed td.none { display: none; }
+    .feed .more tr { padding: 0; }
+    .feed thead + tbody.more tr:first-child td { padding: 0; }
+    .feed .more td::before { content: none; }
     .feed .pass { padding-right: 0; }
     .feed .pass::after { display: none; }
   }
@@ -363,6 +374,8 @@
   const STEP_KEY = "hush-hosted-agent-tutorial-step";
   const DONE_KEY = "hush-hosted-agent-tutorial-done";
   const FEED_POLL_MS = 3000;
+  // The log shows this many of its latest events; the rest open on a click.
+  const FEED_RECENT = 4;
   const SETUP_POLL_MS = 5000;
   const CONSENT_POLL_MS = 3000;
   const CONNECT_POLL_MS = 4000;
@@ -395,6 +408,8 @@
   let activity = null;
   const described = new Map();
   let seenEvents = null;
+  // Whether the reader opened the log's earlier events: a redraw keeps them so.
+  let feedOpen = false;
   // Which expandable boxes the reader opened: a redraw keeps them so.
   const openBoxes = new Map();
   const box = (id) => ` data-box="${id}"${openBoxes.get(id) ? " open" : ""}`;
@@ -1051,6 +1066,7 @@
     Object.assign(app, { phase: "signed_out", expenses: [], notice: null, busy: null, menuOpen: false,
       signinError: message, signinRefused: false });
     consentAsked = false;
+    feedOpen = false;
     forgetTries();
     renderFeed();
   }
@@ -1237,11 +1253,16 @@
           ${expected ? `<span class="expect">✓ as expected</span>` : ""}
           ${note ? `<span class="s">${note}${/[.?!]$/.test(note) ? "" : "."}</span>` : ""}</td>
         <td class="${served}" data-l="Service">${service}</td></tr>`;
-    }).join("");
+    });
+    const earlier = rows.slice(0, Math.max(0, rows.length - FEED_RECENT));
+    const more = earlier.length ? `<tbody class="more"><tr><td colspan="4"><button type="button" data-feed-more
+      aria-expanded="${feedOpen}"><span class="caret" aria-hidden="true">▸</span>${feedOpen ? "Hide earlier events"
+      : `${earlier.length} earlier event${earlier.length === 1 ? "" : "s"}`}</button></td></tr></tbody>
+      ${feedOpen ? `<tbody>${earlier.join("")}</tbody>` : ""}` : "";
     const table = `<div class="feed-scroll"><table class="feed"><colgroup><col class="c-when"><col><col><col></colgroup><thead><tr><th>Time</th>
       <th><span class="sw app"></span>Assistant</th><th><span class="sw hush"></span>Hush</th>
-      <th><span class="sw svc"></span>Expenses service</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-    setHtml(box, `${howto()}${rows ? table : `<p class="empty">Each call the assistant makes for you shows up here.</p>`}
+      <th><span class="sw svc"></span>Expenses service</th></tr></thead>${more}<tbody>${rows.slice(earlier.length).join("")}</tbody></table></div>`;
+    setHtml(box, `${howto()}${rows.length ? table : `<p class="empty">Each call the assistant makes for you shows up here.</p>`}
       <p class="aside">Hush records every call too: in the Hush UI, open <b>Access › Agents › Applications</b>, then
         <b>${esc(appName())}</b>, and its <b>Activity</b> tab.</p>`);
     seenEvents = new Set((activity || []).map((ev) => `${ev.id}:${ev.repeats}`));
@@ -1309,6 +1330,11 @@
       setTimeout(() => { target.textContent = "Copy"; }, 1500);
     } else if (target.dataset.step !== undefined) {
       show(Number(target.dataset.step));
+    } else if (target.dataset.feedMore !== undefined) {
+      feedOpen = !feedOpen;
+      renderFeed();
+      // The redraw replaced the button: keep keyboard focus on it.
+      document.querySelector("[data-feed-more]")?.focus();
     } else if (target.dataset.startOver !== undefined) {
       startOver();
     } else if (target.dataset.check) {
