@@ -25,7 +25,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from starlette.routing import Route
 
-from agent.gateway import ExpensesThroughGateway, Outcome
+from agent.gateway import ExpensesThroughGateway, Outcome, record_sign_in
 from agent.identity import Activity, HushRefused, Identity, Session
 from agent.tutorial import ExpensesSide, pair_with_log, workload
 
@@ -230,7 +230,9 @@ def routes(identity: Identity, expenses: ExpensesThroughGateway, expenses_side: 
             await identity.finish_sign_in(request.state.session, params.get("state", ""), params.get("code", ""))
         except HushRefused as e:
             return back_to_page(e)
-        request.state.session.activity = Activity()
+        session = request.state.session
+        session.activity = Activity()
+        record_sign_in(session.activity, session.user.claims.get("email"))
         return RedirectResponse("/")
 
     async def me(request: Request) -> JSONResponse:

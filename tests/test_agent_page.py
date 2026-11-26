@@ -123,7 +123,7 @@ async def test_a_call_shows_the_account_the_expenses_service_acted_on(tmp_path, 
     async with page_for(FakeHush(), tmp_path, store) as client:
         await sign_in_with(client)
         await client.post("/api/expenses/list")
-        [event] = (await client.get("/api/activity")).json()["events"]
+        [_, event] = (await client.get("/api/activity")).json()["events"]
 
     assert event["seen"] == {"account": "work@other.example.com"}
 

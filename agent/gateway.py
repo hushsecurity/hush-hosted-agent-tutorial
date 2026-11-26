@@ -268,6 +268,11 @@ def _record_call(activity: Activity, tool: str, arguments: dict, started: float,
         activity.events.append(event)
 
 
+def record_sign_in(activity: Activity, email: str | None) -> None:
+    """The user signed in to the assistant: what lets it act for them."""
+    activity.events.append({"id": next(_event_ids), "kind": "signin", "email": email, "time": _iso(time.time())})
+
+
 def _record_decision(activity: Activity, request_id: str, status: str) -> None:
     """The user's answer to a call waiting for approval: granted, denied, or expired."""
     tool, arguments = activity.awaiting.pop(request_id)

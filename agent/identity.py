@@ -82,8 +82,9 @@ class UserTokens:
 
 @dataclasses.dataclass
 class Activity:
-    """What the agent did for one sign-in, for the page to show: its calls and
-    the user's approval decisions, oldest first, and the tools the user approved."""
+    """What the agent did for one sign-in, for the page to show: the sign-in,
+    its calls and the user's approval decisions, oldest first, and the tools
+    the user approved."""
 
     events: collections.deque = dataclasses.field(default_factory=lambda: collections.deque(maxlen=30))
     # Calls waiting for the user's approval, by request: (tool, arguments).

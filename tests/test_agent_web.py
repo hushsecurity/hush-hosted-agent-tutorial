@@ -44,6 +44,12 @@ async def test_refused_when_not_assigned(tmp_path):
     assert (await client.post("/api/expenses/list")).json()["kind"] == "not_assigned"
 
 
+async def test_the_sign_in_is_the_first_event(tmp_path):
+    client = await signed_in_client(FakeHush(), tmp_path)
+    [event] = (await client.get("/api/activity")).json()["events"]
+    assert (event["kind"], event["email"]) == ("signin", "dana@example.com")
+
+
 async def test_the_activity_is_this_users_oldest_first_and_lasts_as_long_as_the_sign_in(tmp_path, monkeypatch):
     async def run(self, session, tool, arguments):
         session.activity.events.append({"tool": tool})
@@ -53,7 +59,7 @@ async def test_the_activity_is_this_users_oldest_first_and_lasts_as_long_as_the_
     client = await signed_in_client(FakeHush(), tmp_path)
     await client.post("/api/expenses/list")
     await client.post("/api/expenses/delete", content='{"expense_id": 1}')
-    assert [e["tool"] for e in (await client.get("/api/activity")).json()["events"]] == ["list_expenses", "delete_expense"]
+    assert [e.get("tool") for e in (await client.get("/api/activity")).json()["events"]] == [None, "list_expenses", "delete_expense"]
 
     other = httpx2.AsyncClient(transport=client._transport, base_url=AGENT_URL)
     assert (await other.get("/api/activity")).json() == {"events": []}
@@ -147,7 +153,7 @@ async def test_an_exchange_that_fails_is_reported(tmp_path):
     (tmp_path / "token").unlink()
 
     assert (await client.post("/api/expenses/list")).json()["kind"] == "error"
-    [event] = (await client.get("/api/activity")).json()["events"]
+    [_, event] = (await client.get("/api/activity")).json()["events"]
     assert "token" in event["exchange"]["error"]
 
 

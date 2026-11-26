@@ -309,6 +309,7 @@
   .badge.ok { background: var(--ok-soft); color: var(--ok); }
   .badge.wait { background: var(--note-soft); color: var(--note); }
   .badge.no { background: var(--deny-soft); color: var(--deny); }
+  .badge.id { background: var(--accent-soft); color: var(--accent); }
   .expect { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
   .empty { font-size: 13px; color: var(--muted); padding: 12px 14px; background: var(--bg); border: 1px dashed var(--line); border-radius: 12px; }
 </style>
@@ -1147,6 +1148,7 @@
   // What the assistant did, in the user's words.
   function action(ev) {
     if (ev.kind === "decision") return "";
+    if (ev.kind === "signin") return "You signed in to the assistant";
     const a = ev.arguments || {};
     if (ev.tool === "list_expenses") return "List your expenses";
     if (ev.tool === "submit_expense") return `Add “${esc(a.description)}”, ${esc(money(a.amount))}`;
@@ -1161,6 +1163,9 @@
   // and whether it's what the tutorial set out to show. The badge's colour is
   // the decision alone: a block is red, even when it's the one expected.
   function decision(ev) {
+    if (ev.kind === "signin") {
+      return ["id", "Signed you in for the assistant", `${ev.email ? `As ${esc(ev.email)}, so` : "So"} it can act for you`];
+    }
     if (ev.kind === "decision") {
       if (ev.decision === "granted") return ["ok", "You approved", "The assistant adds it again, now with your approval."];
       if (ev.decision === "denied") return ["no", "You declined", "So the assistant doesn't add it."];
@@ -1191,7 +1196,7 @@
   // accounts: the one the user connected, which needn't be their Hush email.
   // Its cell's class goes with it: none for an event not about a call.
   function reached(ev) {
-    if (ev.kind === "decision") return ["none", ""];
+    if (ev.kind === "decision" || ev.kind === "signin") return ["none", ""];
     if (ev.outcome !== "done") return ["gone", "not reached"];
     const did = { list_expenses: "Listed", submit_expense: "Added", delete_expense: "Deleted" }[ev.tool] || "Done";
     const account = ev.seen?.account;
@@ -1236,7 +1241,7 @@
     const table = `<div class="feed-scroll"><table class="feed"><colgroup><col class="c-when"><col><col><col></colgroup><thead><tr><th>Time</th>
       <th><span class="sw app"></span>Assistant</th><th><span class="sw hush"></span>Hush</th>
       <th><span class="sw svc"></span>Expenses service</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-    setHtml(box, `${howto()}${rows ? table : `<p class="empty">Nothing yet: the assistant's first call for you shows up here.</p>`}
+    setHtml(box, `${howto()}${rows ? table : `<p class="empty">Each call the assistant makes for you shows up here.</p>`}
       <p class="aside">Hush records every call too: in the Hush UI, open <b>Access › Agents › Applications</b>, then
         <b>${esc(appName())}</b>, and its <b>Activity</b> tab.</p>`);
     seenEvents = new Set((activity || []).map((ev) => `${ev.id}:${ev.repeats}`));
