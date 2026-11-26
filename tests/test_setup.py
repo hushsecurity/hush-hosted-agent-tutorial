@@ -251,7 +251,7 @@ async def test_hush_learns_the_address_only_once_expenses_answers(monkeypatch):
 
 
 CLUSTER = "https://oidc.cluster.example.com/id/ABC"
-ASSISTANT = "system:serviceaccount:tutorial:expenses-assistant"
+ASSISTANT = "system:serviceaccount:tutorial:spend-assistant"
 
 
 def ready_setup(fake: FakeHushAPI, app_id: str) -> Setup:
@@ -266,14 +266,14 @@ AGENT_RULE = {"all_of": [{"any_of": [{"source": "agent", "property": "id", "op":
 
 async def test_start_over_unregisters_the_agent_and_makes_the_app_anew():
     fake = FakeHushAPI()
-    fake.add_agent("agt-1", (CLUSTER, ASSISTANT), name="expenses-assistant")
+    fake.add_agent("agt-1", (CLUSTER, ASSISTANT), name="spend-assistant")
     first = await hush.put(api_for(fake), EXPENSES)
     fake.apps[first["id"]]["assignments"] = [AGENT_RULE]
     setup = ready_setup(fake, first["id"])
 
     result = await setup.start_over(CLUSTER)
 
-    assert result["agent"] == {"ok": True, "detail": "unregistered expenses-assistant"} and result["app"]["ok"]
+    assert result["agent"] == {"ok": True, "detail": "unregistered spend-assistant"} and result["app"]["ok"]
     [app] = fake.apps.values()
     assert (app["id"] != first["id"], app["assignments"], app["assign_all"]) == (True, [], True)
     assert setup.app_id == app["id"] and not fake.agents
@@ -299,13 +299,13 @@ async def test_start_over_unregisters_only_the_tutorials_agent():
 
 async def test_start_over_tells_of_an_agent_named_as_the_page_says_but_without_authentication():
     fake = FakeHushAPI()
-    fake.add_agent("agt-1", name="expenses-assistant")
+    fake.add_agent("agt-1", name="spend-assistant")
     fake.add_agent("agt-2", name="half-done")
     first = await hush.put(api_for(fake), EXPENSES)
 
     result = await ready_setup(fake, first["id"]).start_over(CLUSTER)
 
-    assert result["agent"] == {"ok": None, "detail": "found expenses-assistant with no authentication, so it was "
+    assert result["agent"] == {"ok": None, "detail": "found spend-assistant with no authentication, so it was "
                                                      "left in place. Remove it in the Hush UI if you'd like to "
                                                      "register it from scratch"}
     assert sorted(fake.agents) == ["agt-1", "agt-2"] and result["app"]["ok"]
@@ -314,11 +314,11 @@ async def test_start_over_tells_of_an_agent_named_as_the_page_says_but_without_a
 async def test_start_over_unregisters_the_agent_and_tells_of_another_without_authentication():
     fake = FakeHushAPI()
     fake.add_agent("agt-1", (CLUSTER, ASSISTANT), name="assistant")
-    fake.add_agent("agt-2", name="expenses-assistant")
+    fake.add_agent("agt-2", name="spend-assistant")
     first = await hush.put(api_for(fake), EXPENSES)
     result = await ready_setup(fake, first["id"]).start_over(CLUSTER)
     assert result["agent"]["ok"] is None
-    assert result["agent"]["detail"].startswith("unregistered assistant; found expenses-assistant")
+    assert result["agent"]["detail"].startswith("unregistered assistant; found spend-assistant")
     assert list(fake.agents) == ["agt-2"]
 
 

@@ -15,7 +15,7 @@ in your own cluster, in a few guided steps:
   through, a write waits for the user's approval, a delete is blocked.
 
 The agent reaches apps only through your Hush Identity Gateway. The chart
-deploys an expenses assistant (the agent) and the Expenses service, a sample
+deploys a spend assistant (the agent) and the Expenses service, a sample
 app it works on, in their own namespace.
 
 ## Before you start

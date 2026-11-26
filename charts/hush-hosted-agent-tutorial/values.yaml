@@ -37,7 +37,7 @@ hush:
 agent:
   # Registered in Hush as this service account: the token's subject is
   # system:serviceaccount:<namespace>:<serviceAccount>.
-  serviceAccount: expenses-assistant
+  serviceAccount: spend-assistant
   # Where your browser reaches the agent's page. The default suits
   # kubectl port-forward; set it when serving the page from elsewhere. The
   # page's buttons work only under this address.

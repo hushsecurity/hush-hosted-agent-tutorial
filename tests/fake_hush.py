@@ -15,7 +15,7 @@ from starlette.routing import Route
 GATEWAY = "https://gateway.example.com"
 ISSUER = "https://hush.example.com/v1/deployments/dep-1/agents"
 AGENT_ID = "agt-1"
-AGENT_NAME = "expenses-assistant"
+AGENT_NAME = "spend-assistant"
 AGENT_RESOURCE = f"https://hush.example.com/v1/agents/{AGENT_ID}"
 ALLOWED = {"dana@example.com"}
 
@@ -28,7 +28,7 @@ def jwt(claims: dict) -> str:
 
 
 CLUSTER_ISSUER = "https://oidc.cluster.example.com"
-SERVICE_ACCOUNT = "system:serviceaccount:tutorial:expenses-assistant"
+SERVICE_ACCOUNT = "system:serviceaccount:tutorial:spend-assistant"
 SERVICE_ACCOUNT_TOKEN = jwt({"iss": CLUSTER_ISSUER, "sub": SERVICE_ACCOUNT, "aud": [ISSUER]})
 
 
