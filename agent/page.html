@@ -93,6 +93,7 @@
   .diagram .arrow { color: var(--muted); }
   .fields.card { border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; }
   .fields.card th, .fields.card td { padding-inline: 12px; }
+  .tasks .then { margin-top: 8px; }
   .linkbtn { border: 0; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 0; text-decoration: underline; }
   .linkbtn:disabled { color: var(--muted); cursor: default; text-decoration: none; }
   details.detail summary { cursor: pointer; }
@@ -868,9 +869,10 @@
       "One switch in Hush stops the agent at once: for every user, on every app. Nothing to revoke, rotate or redeploy.",
       `<ol class="tasks">
         <li><div>In the Hush UI, go to <b>Access › Agents › Registry</b>. Find
-          <b>${esc(agentName() || "spend-assistant")}</b> and turn off its <b>Enabled</b> switch.</div></li>
+          <b>${esc(agentName() || "spend-assistant")}</b> and set its <b>Enabled</b> switch to <b>off</b>.</div></li>
         <li><div>Click refresh in the assistant. Hush refuses the agent before it reaches any app.</div></li>
-        <li><div>Turn <b>Enabled</b> back on, then click <b>Try again</b> in the assistant. It works at once.</div></li>
+        <li><div>Set <b>Enabled</b> back to <b>on</b>.</div></li>
+        <li><div>Click <b>Try again</b> in the assistant. It works at once.</div></li>
       </ol>
       ${agentDisabled() ? `<p class="status no"><span>Right now, the agent is <b>switched off</b>.</span></p>`
         : registered() ? `<p class="status ok"><span>Right now, the agent is <b>on</b>.</span></p>` : ""}`,
@@ -882,13 +884,13 @@
       "Hush lets the agent reach an app only for the users you name. Leave yourself out, then let only yourself in.",
       `<ol class="tasks">
         <li><div>In the Hush UI, open <b>Access › Agents › Applications</b>, then <b>${esc(appName())}</b> and its <b>Assignments</b> tab.</div></li>
-        <li><div>Edit the assignment to <b>${esc(agentName() || "the agent")}</b>, and turn off <b>Assign to all users</b>.</div></li>
+        <li><div>Edit the assignment to <b>${esc(agentName() || "the agent")}</b>, and switch <b>Assign to all users</b> to <b>off</b>.</div></li>
         <li><div>Click <b>Add › Custom rule</b>, and set it to:
-          ${fields([["Email", "is not"], ["Value", val(me.email)]], "card")}</div></li>
-        <li><div>Click outside the rule to apply it. Then click refresh in the assistant: Hush no longer offers it
-          Expenses for you.</div></li>
-        <li><div>Change the rule to <b>is</b>, and click outside it to apply it. Then click <b>Try again</b> in the
-          assistant: it works again, for you alone.</div></li>
+          ${fields([["Email", "is not"], ["Value", val(me.email)]], "card")}
+          <p class="then">Then click outside the rule to apply it.</p></div></li>
+        <li><div>Click refresh in the assistant: Hush no longer offers it the Expenses service for you.</div></li>
+        <li><div>Change the rule to <b>is</b>, and click outside it to apply it.</div></li>
+        <li><div>Click <b>Try again</b> in the assistant: it works again, for you alone.</div></li>
       </ol>
       <p class="aside">When you're done, only you can use the assistant on ${esc(appName())}. <b>Start over</b>, at
         the top, puts it back as installed.</p>
